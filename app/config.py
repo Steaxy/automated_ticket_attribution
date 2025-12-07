@@ -21,7 +21,7 @@ def _get_required_env(name: str) -> str:
 def load_helpdesk_config() -> HelpdeskAPIConfig:
     load_dotenv()
 
-    url = os.getenv("HELPDESK_API_URL")
+    url = _get_required_env("HELPDESK_API_URL")
     api_key = _get_required_env("HELPDESK_API_KEY")
     api_secret = _get_required_env("HELPDESK_API_SECRET")
 
