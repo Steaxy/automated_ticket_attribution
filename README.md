@@ -4,7 +4,7 @@ Project implements a small automation pipeline that simulates
 automatic classification of IT helpdesk tickets based on an IT Service Catalog.
 
 The goal is to:
-- Fetch raw helpdesk requests from a webhook.
+- Fetch raw helpdesk requests.
 - Fetch the Service Catalog.
 - Use an LLM to classify tickets into `request_category`, `request_type`, and `sla`.
 - Export the final dataset to an Excel report.
