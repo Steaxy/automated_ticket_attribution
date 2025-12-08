@@ -4,14 +4,13 @@ from typing import Any, Dict, List
 import requests
 from requests import HTTPError, RequestException
 from app.config import HelpdeskAPIConfig
-from app.domain.models import HelpdeskRequest
+from app.domain.helpdesk import HelpdeskRequest
 
 
 logger = logging.getLogger(__name__)
 
 class HelpdeskAPIError(RuntimeError):
-    pass
-
+    """Raised when the Service Catalog cannot be retrieved, parsed, or validated."""
 
 class HelpdeskClient:
     def __init__(self, config: HelpdeskAPIConfig) -> None:

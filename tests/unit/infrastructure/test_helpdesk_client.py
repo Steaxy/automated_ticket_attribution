@@ -2,7 +2,7 @@ from typing import Any, Dict, List
 from unittest.mock import Mock
 import pytest
 from app.config import HelpdeskAPIConfig
-from app.domain.models import HelpdeskRequest
+from app.domain.helpdesk import HelpdeskRequest
 from app.infrastructure.helpdesk_client import HelpdeskClient, HelpdeskAPIError
 
 
@@ -23,9 +23,8 @@ def _make_client_with_mock_session(json_payload: Any) -> HelpdeskClient:
 
     mock_session.post = Mock(return_value=mock_response)
 
-    client._session = mock_session                              # type: ignore[attr-defined]
+    client._session = mock_session                                              # type: ignore[attr-defined]
     return client
-
 
 def test_fetch_requests_happy_path() -> None:
     sample_data: Dict[str, Any] = {
@@ -55,7 +54,6 @@ def test_fetch_requests_happy_path() -> None:
     assert req.short_description == "Forgot my Okta password"
     assert req.raw_payload["requester_email"] == "j.doe@company.com"
 
-
 def test_fetch_requests_unexpected_shape_raises() -> None:
     bad_data = {
         "response_code": 200,
@@ -67,14 +65,12 @@ def test_fetch_requests_unexpected_shape_raises() -> None:
     with pytest.raises(HelpdeskAPIError):
         _ = client.fetch_requests()
 
-
 def test_fetch_raw_returns_json() -> None:
     sample_data = {"foo": "bar"}
     client = _make_client_with_mock_session(sample_data)
 
     raw = client.fetch_raw()
     assert raw == sample_data
-
 
 def test_http_error_is_wrapped_in_helpdesk_api_error() -> None:
     config = HelpdeskAPIConfig(
@@ -93,11 +89,10 @@ def test_http_error_is_wrapped_in_helpdesk_api_error() -> None:
     mock_response.raise_for_status.side_effect = HTTPError("404 not found")
     mock_session.post.return_value = mock_response
 
-    client._session = mock_session                                              # type: ignore[attr-defined]
+    client._session = mock_session                                                  # type: ignore[attr-defined]
 
     with pytest.raises(HelpdeskAPIError):
         _ = client.fetch_requests()
-
 
 def test_json_error_is_wrapped_in_helpdesk_api_error() -> None:
     config = HelpdeskAPIConfig(

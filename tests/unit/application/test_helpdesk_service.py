@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 from app.application.helpdesk_services import HelpdeskService
-from app.domain.models import HelpdeskRequest
+from app.domain.helpdesk import HelpdeskRequest
 from app.infrastructure.helpdesk_client import HelpdeskClient
 
 
@@ -11,7 +11,7 @@ def test_helpdesk_service_delegates_to_client() -> None:
 
     service = HelpdeskService(mock_client)
 
-    result = service.load_requests()
+    result = service.load_helpdesk_requests()
 
     assert result == expected
     mock_client.fetch_requests.assert_called_once()
