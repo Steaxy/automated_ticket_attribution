@@ -24,7 +24,10 @@ automated_ticket_attribution/
     domain/                 # models
     infrastructure/         # integrations
     application/            # use-cases
+    shared/
+    config.py
   main.py                   # run app
+  tests/
   requirements.txt
   requirements-dev.txt
   Makefile
