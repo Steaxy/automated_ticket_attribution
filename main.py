@@ -4,8 +4,11 @@ from app.application.helpdesk_services import HelpdeskService
 from app.config import (
     load_helpdesk_config,
     load_service_catalog_config,
+    load_llm_config,
 )
 from app.infrastructure.service_catalog_client import ServiceCatalogClient, ServiceCatalogError
+from app.infrastructure.llm_gemini_classifier import GeminiLLMClassifier
+from app.application.llm_classifier import LLMClassificationError
 
 
 logger = logging.getLogger(__name__)
@@ -53,9 +56,30 @@ def main() -> None:
         len(service_catalog.categories),
     )
 
-    # print first few items
+    # 3.
+
+    llm_config = load_llm_config()
+    gemini = GeminiLLMClassifier(llm_config)
+
+    # classify first 3 requests and log results
+    for req in requests_[:3]:
+        try:
+            result = gemini.classify_helpdesk_request(req, service_catalog)
+        except LLMClassificationError as exc:
+            logger.error("LLM classification failed for %s: %s", req.raw_id, exc)
+            continue
+
+        logger.info(
+            "[part 3] LLM result for %s: category=%r type=%r sla=%r %r",
+            req.raw_id,
+            result.request_category,
+            result.request_type,
+            result.sla_value,
+            result.sla_unit,
+        )
+
     for req in requests_[:5]:
-        logger.info("Request ID=%s short_description=%r", req.raw_id, req.short_description)
+        logger.info("[part 1] Request ID=%s short_description=%r", req.raw_id, req.short_description)
 
 
 if __name__ == "__main__":

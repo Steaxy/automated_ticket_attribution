@@ -56,7 +56,7 @@ class ServiceCatalogClient:
 
         catalog = ServiceCatalog(categories=categories)
         logger.info(
-            "Loaded Service Catalog: %d categories, %d total request types",
+            "[part 2] Loaded Service Catalog: %d categories, %d total request types",
             len(catalog.categories),
             sum(len(c.requests) for c in catalog.categories),
         )

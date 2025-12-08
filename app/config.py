@@ -40,3 +40,18 @@ def load_service_catalog_config() -> ServiceCatalogConfig:
     return ServiceCatalogConfig(
         url=url,
     )
+
+# Gemini
+@dataclass(frozen=True)
+class LLMConfig:
+    model_name: str
+    api_key: str
+
+def load_llm_config() -> LLMConfig:
+    model_name = os.getenv("LLM_MODEL_NAME", "gemini-2.5-flash")
+    api_key = _get_required_env("GEMINI_API_KEY")
+
+    return LLMConfig(
+        model_name=model_name,
+        api_key=api_key,
+    )
