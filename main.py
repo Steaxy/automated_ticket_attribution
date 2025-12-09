@@ -7,7 +7,7 @@ from app.config import (
     load_llm_config,
 )
 from app.infrastructure.service_catalog_client import ServiceCatalogClient, ServiceCatalogError
-from app.infrastructure.llm_gemini_classifier import GeminiLLMClassifier
+from app.infrastructure.llm_classifier import LLMClassifier
 from app.application.llm_classifier import LLMClassificationError
 from app.infrastructure.excel import build_excel, ExcelReportError
 from app.domain.helpdesk import HelpdeskRequest
@@ -60,13 +60,13 @@ def main() -> None:
 
     # [part 3 and 4] classify the requests by LLM
     llm_config = load_llm_config()
-    gemini = GeminiLLMClassifier(llm_config)
+    llm = LLMClassifier(llm_config)
 
     # classify all requests (even if not success by LLM) and log first 3 of them
     classified_requests: list[HelpdeskRequest] = []
     for idx, req in enumerate(requests_):
         try:
-            result = gemini.classify_helpdesk_request(req, service_catalog)
+            result = llm.classify_helpdesk_request(req, service_catalog)
         except LLMClassificationError as exc:
             logger.error("LLM classification failed for %s: %s", req.raw_id, exc)
         else:

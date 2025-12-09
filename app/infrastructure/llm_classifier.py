@@ -61,10 +61,10 @@ def _catalog_to_prompt_fragment(catalog: ServiceCatalog) -> str:
             )
     return "\n".join(lines)
 
-class GeminiLLMClassifier:
+class LLMClassifier:
     def __init__(self, config: LLMConfig) -> None:
         if not config.api_key:
-            raise LLMClassificationError("GEMINI_API_KEY must be configured.")
+            raise LLMClassificationError("LLM_API_KEY must be configured.")
 
         self._client = genai.Client(api_key=config.api_key)
         self._model = config.model_name
@@ -94,16 +94,16 @@ class GeminiLLMClassifier:
                 ),
             )
         except Exception as exc:
-            logger.error("Gemini classification call failed: %s", exc)
-            raise LLMClassificationError("Gemini API call failed") from exc
+            logger.error("LLM classification call failed: %s", exc)
+            raise LLMClassificationError("LLM API call failed") from exc
 
         text = _get_response_text(response)
 
         try:
             data: dict[str, Any] = json.loads(text)
         except json.JSONDecodeError as exc:
-            logger.error("Gemini returned non-JSON output: %r", text[:300])
-            raise LLMClassificationError("Gemini output was not valid JSON") from exc
+            logger.error("LLM returned non-JSON output: %r", text[:300])
+            raise LLMClassificationError("LLM output was not valid JSON") from exc
 
         result = LLMClassificationResult(
             request_category=normalize_str_or_none(data.get("request_category")),
@@ -122,4 +122,4 @@ def _get_response_text(response: Any) -> str:
     text = getattr(response, "text", None)
     if isinstance(text, str) and text.strip():
         return text
-    raise LLMClassificationError("Gemini response contained no text")
+    raise LLMClassificationError("LLM response contained no text")
