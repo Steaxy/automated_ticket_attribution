@@ -19,7 +19,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def pipeline() -> int:
+def pipeline() -> None:
     helpdesk_config = load_helpdesk_config()
     client = HelpdeskClient(helpdesk_config)
     service = HelpdeskService(client)
@@ -45,8 +45,6 @@ def pipeline() -> int:
     _build_excel(classified_requests)
 
     _log_sample_requests(requests_)
-
-    return 0
 
 def _load_helpdesk_requests(service: HelpdeskService) -> list[HelpdeskRequest]:
     try:

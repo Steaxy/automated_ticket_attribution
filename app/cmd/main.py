@@ -11,8 +11,7 @@ def logging_conf() -> None:
 
 def main() -> None:
     logging_conf()
-    exit_code = pipeline()
-    raise SystemExit(exit_code)
+    pipeline()
 
 if __name__ == "__main__":
     main()

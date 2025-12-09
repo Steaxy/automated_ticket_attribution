@@ -1,11 +1,12 @@
 from __future__ import annotations
 import logging
 from io import BytesIO
-from typing import Iterable, List
+from typing import Iterable, List, Any
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from app.domain.helpdesk import HelpdeskRequest
+from openpyxl.worksheet.worksheet import Worksheet
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,13 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
     # create workbook and sheet
     try:
         wb = Workbook()
-        ws = wb.active
+
+        ws_raw = wb.active
+        if ws_raw is None or not isinstance(ws_raw, Worksheet):
+            logger.error("Active sheet is not a Worksheet or is None: %r", ws_raw)
+            raise ExcelReportError("Failed to get active worksheet")
+        ws: Worksheet = ws_raw
+
         ws.title = "Helpdesk Requests"
 
         # define and write header
@@ -64,7 +71,15 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
         # auto-fit by setting column width from max content length
         for column_cells in ws.columns:
             max_length = 0
-            column_letter = get_column_letter(column_cells[0].column)
+
+            first_cell = column_cells[0]
+            col_index: Any = first_cell.column
+            if not isinstance(col_index, int):
+                # skip weird column indices instead of crashing
+                logger.warning("Unexpected column index type: %r (%r)", col_index, type(col_index))
+                continue
+
+            column_letter = get_column_letter(col_index)
             for cell in column_cells:
                 value = cell.value
                 if value is None:
@@ -72,6 +87,7 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
                 value_str = str(value)
                 if len(value_str) > max_length:
                     max_length = len(value_str)
+
             # padding
             ws.column_dimensions[column_letter].width = max_length + 2
 
