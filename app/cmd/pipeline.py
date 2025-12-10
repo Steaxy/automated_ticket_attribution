@@ -17,7 +17,6 @@ from app.infrastructure.save_excel import save_excel
 from pathlib import Path
 from app.infrastructure.report_log import SQLiteReportLog
 from app.cmd.pipeline_helpers import (
-    _load_helpdesk_requests,
     _load_service_catalog,
     _log_sample_requests,
     _send_report,
@@ -63,18 +62,17 @@ def pipeline(report: str | None = None) -> None:
         )
         return
 
-    helpdesk_config = load_helpdesk_config()
-    client = HelpdeskClient(helpdesk_config)
-    service = HelpdeskService(client)
-
-    catalog_config = load_service_catalog_config()
-    catalog_client = ServiceCatalogClient(catalog_config)
-
     # [part 1] fetch helpdesk requests
-    requests_ = _load_helpdesk_requests(service)
+    helpdesk_config = load_helpdesk_config()
+    helpdesk_client = HelpdeskClient(helpdesk_config)
+    helpdesk_service = HelpdeskService(helpdesk_client)
+
+    requests_ = helpdesk_service.load_helpdesk_requests()
 
     # [part 2] fetch service catalog
-    service_catalog = _load_service_catalog(catalog_client)
+    service_catalog_config = load_service_catalog_config()
+    service_catalog_client = ServiceCatalogClient(service_catalog_config)
+    service_catalog = _load_service_catalog(service_catalog_client)
 
     # [part 3 and 4] classify the requests by LLM
     llm_config = load_llm_config()
