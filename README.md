@@ -29,6 +29,7 @@ automated_ticket_attribution/
     shared/
     config.py
   tests/
+  output/
   requirements.txt
   requirements-dev.txt
   Makefile
@@ -67,6 +68,7 @@ make run        # run the app
 make test       # run unit tests (pytest)
 make lint       # lint with ruff
 make type-check # static type checking with mypy
+make excel      # build example excel file
 ```
 ## License
 

@@ -9,13 +9,12 @@ from app.config import (
 )
 from app.infrastructure.service_catalog_client import ServiceCatalogClient, ServiceCatalogError
 from app.infrastructure.llm_classifier import LLMClassifier
-from app.infrastructure.excel import build_excel, ExcelReportError
 from app.application.missing_sla import missing_sla
 from app.application.classify_requests import classify_requests
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
-from datetime import datetime
 from app.cmd.spinner import Spinner
+from app.infrastructure.save_excel import save_excel
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,7 @@ def pipeline() -> None:
 
     # [part 5] build Excel file
     missing_sla(classified_requests, service_catalog)
-    _build_excel(classified_requests)
+    save_excel(classified_requests)
 
     _log_sample_requests(requests_)
 
@@ -70,23 +69,6 @@ def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalo
         len(service_catalog.categories),
     )
     return service_catalog
-
-def _build_excel(classified_requests: list[HelpdeskRequest], output_path: str | None = None) -> None:
-    try:
-        excel_bytes = build_excel(classified_requests)
-    except ExcelReportError as exc:
-        logger.error("Could not generate Excel report: %s", exc)
-        return
-
-    if output_path is None:
-        now = datetime.now()
-        timestamp = now.strftime("%d-%m-%Y %H-%M-%S")
-        output_path = f"classified_requests_{timestamp}.xlsx"
-
-    with open(output_path, "wb") as f:
-        f.write(excel_bytes)
-
-    logger.info("[part 5] Excel report generated at %s", output_path)
 
 def _log_sample_requests(requests_: list[HelpdeskRequest], limit: int = 5) -> None:
     for req in requests_[:limit]:

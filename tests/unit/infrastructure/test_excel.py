@@ -71,3 +71,87 @@ def test_build_excel() -> None:
                     cell.border.bottom,
                 )
             )
+
+# verify hierarchical sorting by category, type, and short_description
+def test_build_excel_sorts() -> None:
+    # given
+    # intentionally unsorted input
+    requests = [
+        _make_request(
+            raw_id="1",
+            request_category="Category B",
+            request_type="Type Z",
+            short_description="zzz",
+        ),
+        _make_request(
+            raw_id="2",
+            request_category="Category A",
+            request_type="Type Y",
+            short_description="beta",
+        ),
+        _make_request(
+            raw_id="3",
+            request_category="Category A",
+            request_type="Type X",
+            short_description="alpha",
+        ),
+        _make_request(
+            raw_id="4",
+            request_category="Category A",
+            request_type="Type X",
+            short_description="aaa",
+        ),
+    ]
+
+    # when
+    excel_bytes = build_excel(requests)
+
+    # then
+    wb = load_workbook(BytesIO(excel_bytes))
+    ws = wb.active
+
+    # rows start from 2 because row 1 is header
+    raw_ids_order = [ws[f"A{row}"].value for row in range(2, 2 + len(requests))]
+
+    # expected order by:
+    #   request_category ASC
+    #   request_type ASC
+    #   short_description ASC
+    # → Category A / Type X / "aaa" (4)
+    #   Category A / Type X / "alpha" (3)
+    #   Category A / Type Y / "beta" (2)
+    #   Category B / Type Z / "zzz" (1)
+    assert raw_ids_order == ["4", "3", "2", "1"]
+
+
+# verify columns are auto-fitted based on content length
+def test_build_excel_auto_fits_columns() -> None:
+    # given
+    # second row has much longer short_description
+    requests = [
+        _make_request(
+            raw_id="1",
+            short_description="short",
+        ),
+        _make_request(
+            raw_id="2",
+            short_description="this is a much longer short description for testing",
+        ),
+    ]
+
+    # when
+    excel_bytes = build_excel(requests)
+
+    # then
+    wb = load_workbook(BytesIO(excel_bytes))
+    ws = wb.active
+
+    # column A: raw_id, small content
+    width_raw_id = ws.column_dimensions["A"].width
+    # column D: short_description, larger content
+    width_short_desc = ws.column_dimensions["D"].width
+
+    # widths should be numbers and short_description column should be wider
+    assert isinstance(width_raw_id, (int, float))
+    assert isinstance(width_short_desc, (int, float))
+    assert width_short_desc > width_raw_id
