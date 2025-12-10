@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Protocol
+from app.application.send_report_email_template import build_email_body
 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class ReportEmailSender(Protocol):
     ) -> None:
         ...
 
-def send_classified_requests_report(
+def send_report(
     email_sender: ReportEmailSender,
     reports: list[str],
     codebase_url: str,
@@ -31,12 +32,9 @@ def send_classified_requests_report(
 
     subject = f"Automation Engineer interview - technical task - {candidate_name}"
 
-    body = (
-        "Hi,\n\n"
-        "Please find attached the classified helpdesk requests report.\n\n"
-        f"Codebase: {codebase_url}\n\n"
-        "Best regards,\n"
-        f"{candidate_name}\n"
+    body = build_email_body(
+        codebase_url=codebase_url,
+        candidate_name=candidate_name,
     )
 
     logger.info(

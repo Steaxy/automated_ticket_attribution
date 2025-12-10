@@ -7,7 +7,7 @@ from app.infrastructure.service_catalog_client import ServiceCatalogClient, Serv
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
 from app.infrastructure.email_sender import SMTPSender
-from app.application.send_report import send_classified_requests_report
+from app.application.send_report import send_report
 from datetime import datetime
 from pathlib import Path
 from app.infrastructure.report_log import SQLiteReportLog
@@ -53,7 +53,7 @@ def _send_report(
     email_config = load_email_config()
     email_sender = SMTPSender(email_config)
 
-    send_classified_requests_report(
+    send_report(
         email_sender=email_sender,
         reports=[str(p) for p in reports],
         codebase_url="https://github.com/Steaxy/automated_ticket_attribution",

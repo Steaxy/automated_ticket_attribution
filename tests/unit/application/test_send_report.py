@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import pytest
-from app.application.send_report import send_classified_requests_report
+from app.application.send_report import send_report
 
 
 class FakeReportEmailSender:
@@ -16,7 +16,7 @@ class FakeReportEmailSender:
     ) -> None:
         self.calls.append((subject, body, attachments))
 
-def test_send_classified_requests_report(tmp_path: Path) -> None:
+def test_send_report(tmp_path: Path) -> None:
     # given
     report_file = tmp_path / "report.xlsx"
     report_file.write_bytes(b"dummy content")
@@ -25,7 +25,7 @@ def test_send_classified_requests_report(tmp_path: Path) -> None:
     codebase_url = "https://github.com/Steaxy/automated_ticket_attribution"
     candidate_name = "John Doe"
 
-    send_classified_requests_report(
+    send_report(
         email_sender=sender,
         reports=[str(report_file)],
         codebase_url=codebase_url,
@@ -44,14 +44,14 @@ def test_send_classified_requests_report(tmp_path: Path) -> None:
     assert attachments == [report_file]
 
 
-def test_send_classified_requests_report_missing_file(tmp_path: Path) -> None:
+def test_send_report_missing_file(tmp_path: Path) -> None:
     # given
     missing_file = tmp_path / "missing.xlsx"
     sender = FakeReportEmailSender()
 
     # when / then
     with pytest.raises(FileNotFoundError):
-        send_classified_requests_report(
+        send_report(
             email_sender=sender,
             reports=[str(missing_file)],
             codebase_url="https://example.com",
