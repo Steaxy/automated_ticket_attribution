@@ -19,7 +19,7 @@ def save_excel(requests: list[HelpdeskRequest], output_path: str | None = None, 
 
     if output_path is None:
         now = datetime.now()
-        timestamp = now.strftime("%d-%m-%Y %H-%M-%S")
+        timestamp = datetime.now().isoformat(timespec="seconds").replace(":", "-")
         filename = f"{filename_prefix}classified_requests_{timestamp}.xlsx"
         path = project_root / "output" / filename
     else:
