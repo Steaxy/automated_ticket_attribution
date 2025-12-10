@@ -1,130 +1,166 @@
+from __future__ import annotations
 import json
-from typing import Any
-from unittest.mock import Mock, patch
+from dataclasses import dataclass
+from typing import Any, Dict
 import pytest
-from app.config import LLMConfig
-from app.domain.helpdesk import HelpdeskRequest
-from app.domain.service_catalog import ServiceCatalog, ServiceCategory, ServiceRequestType, SLA
-from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
-from app.infrastructure.llm_classifier import LLMClassifier
+from app.infrastructure.llm_classifier import LLMClassifier, LLMClassificationResult
+from app.application.llm_classifier import LLMClassificationError
 
 
-@patch("app.infrastructure.llm_classifier.genai.Client")
-def test_classify_helpdesk_request_happy_path(mock_client_cls: Mock) -> None:
-    config = LLMConfig(
-        model_name="test-model",
-        api_key="test-api-key",
-    )
+@dataclass
+class DummyLLMConfig:
+    api_key: str = "dummy-key"
+    model_name: str = "dummy-model"
 
-    mock_client = Mock()
-    mock_client_cls.return_value = mock_client
+@dataclass
+class DummyHelpdeskRequest:
+    raw_id: str
+    short_description: str = ""
+    raw_payload: Dict[str, Any] | None = None
 
-    payload: dict[str, Any] = {
-        "request_category": "Access Management",
-        "request_type": "Reset password",
-        "sla_unit": "hours",
-        "sla_value": 4,
+@dataclass
+class DummySLA:
+    unit: str
+    value: int
+
+@dataclass
+class DummyRequestType:
+    name: str
+    sla: DummySLA
+
+@dataclass
+class DummyCategory:
+    name: str
+    requests: list[DummyRequestType]
+
+@dataclass
+class DummyCatalog:
+    categories: list[DummyCategory]
+
+@dataclass
+class DummyResponse:
+    text: str
+
+class DummyModels:
+    def __init__(self, response: DummyResponse) -> None:
+        self._response = response
+        self.last_kwargs: dict[str, Any] | None = None
+
+    def generate_content(self, **kwargs: Any) -> DummyResponse:
+        self.last_kwargs = kwargs
+        return self._response
+
+class DummyClient:
+    def __init__(self, response: DummyResponse) -> None:
+        self.models = DummyModels(response)
+
+
+# classify_batch parses JSON and returns mapping raw_id -> result
+def test_classify_batch_happy_path() -> None:
+    # fake LLM JSON output
+    payload = {
+        "items": [
+            {
+                "raw_id": "req_101",
+                "request_category": "Access Management",
+                "request_type": "Reset forgotten password",
+                "sla_unit": "hours",
+                "sla_value": 4,
+            },
+            {
+                "raw_id": "req_102",
+                "request_category": "Hardware Support",
+                "request_type": "Laptop Repair/Replacement",
+                "sla_unit": "days",
+                "sla_value": 7,
+            },
+        ]
     }
+    response = DummyResponse(text=json.dumps(payload))
 
-    mock_response = Mock()
-    mock_response.text = json.dumps(payload)
-    mock_client.models.generate_content.return_value = mock_response
+    # construct classifier with dummy config and client
+    cfg = DummyLLMConfig()
+    classifier = LLMClassifier(cfg)                                                                                         # type: ignore[arg-type]
+    classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
-    classifier = LLMClassifier(config)
-
-    request = HelpdeskRequest(
-        raw_id="req_1",
-        short_description="Forgot my password",
-        raw_payload={},
-        request_category=None,
-        request_type=None,
-        sla_unit=None,
-        sla_value=None,
-    )
-
-    catalog = ServiceCatalog(
+    # build minimal catalog (content is irrelevant, just needs to be structurally valid)
+    catalog = DummyCatalog(
         categories=[
-            ServiceCategory(
+            DummyCategory(
                 name="Access Management",
-                requests=[
-                    ServiceRequestType(
-                        name="Reset password",
-                        sla=SLA(unit="hours", value=4),
-                    )
-                ],
-            )
+                requests=[DummyRequestType("Reset forgotten password", DummySLA("hours", 4))],
+            ),
+            DummyCategory(
+                name="Hardware Support",
+                requests=[DummyRequestType("Laptop Repair/Replacement", DummySLA("days", 7))],
+            ),
         ]
     )
 
-    # act
-    result = classifier.classify_helpdesk_request(request, catalog)
+    requests = [
+        DummyHelpdeskRequest(raw_id="req_101", short_description="Forgot my Okta password"),
+        DummyHelpdeskRequest(raw_id="req_102", short_description="Laptop does not start"),
+    ]
 
-    # assert
-    assert isinstance(result, LLMClassificationResult)
-    assert result.request_category == "Access Management"
-    assert result.request_type == "Reset password"
-    assert result.sla_unit == "hours"
-    assert result.sla_value == 4
+    results = classifier.classify_batch(requests, catalog)                                                                  # type: ignore[arg-type]
 
-@patch("app.infrastructure.llm_classifier.genai.Client")
-def test_classify_helpdesk_request_raises_on_non_json(mock_client_cls: Mock) -> None:
-    config = LLMConfig(
-        model_name="test-model",
-        api_key="test-api-key",
-    )
+    assert set(results.keys()) == {"req_101", "req_102"}
 
-    mock_client = Mock()
-    mock_client_cls.return_value = mock_client
+    r1 = results["req_101"]
+    assert isinstance(r1, LLMClassificationResult)
+    assert r1.request_category == "Access Management"
+    assert r1.request_type == "Reset forgotten password"
+    assert r1.sla_unit == "hours"
+    assert r1.sla_value == 4
 
-    mock_response = Mock()
-    mock_response.text = "this is not json"
-    mock_client.models.generate_content.return_value = mock_response
+    r2 = results["req_102"]
+    assert r2.request_category == "Hardware Support"
+    assert r2.request_type == "Laptop Repair/Replacement"
+    assert r2.sla_unit == "days"
+    assert r2.sla_value == 7
 
-    classifier = LLMClassifier(config)
-
-    request = HelpdeskRequest(
-        raw_id="req_1",
-        short_description="Anything",
-        raw_payload={},
-        request_category=None,
-        request_type=None,
-        sla_unit=None,
-        sla_value=None,
-    )
-
-    catalog = ServiceCatalog(categories=[])
-
-    with pytest.raises(LLMClassificationError, match="LLM output was not valid JSON"):
-        _ = classifier.classify_helpdesk_request(request, catalog)
+    # check that the classifier used the configured model name
+    models = classifier._client.models                                                                                      # type: ignore[attr-defined]
+    assert models.last_kwargs is not None
+    assert models.last_kwargs["model"] == cfg.model_name
 
 
-@patch("app.infrastructure.llm_classifier.genai.Client")
-def test_classify_helpdesk_request_raises_when_text_empty(mock_client_cls: Mock) -> None:
-    config = LLMConfig(
-        model_name="test-model",
-        api_key="test-api-key",
-    )
+# empty input returns empty mapping and must not call generate_content
+def test_classify_batch_empty_requests() -> None:
+    response = DummyResponse(text=json.dumps({"items": []}))
+    cfg = DummyLLMConfig()
+    classifier = LLMClassifier(cfg)                                                                                         # type: ignore[arg-type]
+    classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
-    mock_client = Mock()
-    mock_client_cls.return_value = mock_client
+    catalog = DummyCatalog(categories=[])
+    results = classifier.classify_batch([], catalog)                                                                # type: ignore[arg-type]
 
-    mock_response = Mock()
-    mock_response.text = "   "                                              # only whitespace -> treated as empty
-    mock_client.models.generate_content.return_value = mock_response
+    assert results == {}
 
-    classifier = LLMClassifier(config)
 
-    request = HelpdeskRequest(
-        raw_id="req_1",
-        short_description="Anything",
-        raw_payload={},
-        request_category=None,
-        request_type=None,
-        sla_unit=None,
-        sla_value=None,
-    )
+# invalid JSON in response raises LLMClassificationError
+def test_classify_batch_invalid_json_raises() -> None:
+    response = DummyResponse(text="this is not json")
+    cfg = DummyLLMConfig()
+    classifier = LLMClassifier(cfg)                                                                                         # type: ignore[arg-type]
+    classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
-    catalog = ServiceCatalog(categories=[])
+    catalog = DummyCatalog(categories=[])
+    requests = [DummyHelpdeskRequest(raw_id="req_1")]
 
-    with pytest.raises(LLMClassificationError, match="contained no text"):
-        _ = classifier.classify_helpdesk_request(request, catalog)
+    with pytest.raises(LLMClassificationError):
+        classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]
+
+
+# missing 'items' key raises LLMClassificationError
+def test_classify_batch_missing_items_raises() -> None:
+    response = DummyResponse(text=json.dumps({"foo": "bar"}))
+    cfg = DummyLLMConfig()
+    classifier = LLMClassifier(cfg)                                                                                         # type: ignore[arg-type]
+    classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
+
+    catalog = DummyCatalog(categories=[])
+    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+
+    with pytest.raises(LLMClassificationError):
+        classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]

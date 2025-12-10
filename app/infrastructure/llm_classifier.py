@@ -12,7 +12,7 @@ from app.config import LLMConfig
 from google import genai
 from google.genai import types
 from app.shared.normalization import normalize_str_or_none, normalize_int_or_none
-from app.infrastructure.llm_classifier_prompt import LLM_PROMPT_TEMPLATE, LLM_BATCH_PROMPT_TEMPLATE
+from app.infrastructure.llm_classifier_prompt import LLM_BATCH_PROMPT_TEMPLATE
 
 
 logger = logging.getLogger(__name__)
@@ -25,54 +25,16 @@ class LLMClassifier:
         self._client = genai.Client(api_key=config.api_key)
         self._model = config.model_name
 
-    def classify_helpdesk_request(
-        self,
-        request: HelpdeskRequest,
-        catalog: ServiceCatalog,
-    ) -> LLMClassificationResult:
-        catalog_fragment = _catalog_to_prompt_fragment(catalog)
-        raw_payload_str = json.dumps(request.raw_payload or {}, ensure_ascii=False)
+    def classify_helpdesk_request(self, request: HelpdeskRequest, catalog: ServiceCatalog) -> LLMClassificationResult:
+        results = self.classify_batch([request], catalog)
+        raw_id = (request.raw_id or "").strip()
+        if raw_id and raw_id in results:
+            return results[raw_id]
 
-        prompt = LLM_PROMPT_TEMPLATE.format(
-            catalog=catalog_fragment,
-            request_id=request.raw_id or "",
-            short_description=request.short_description or "",
-            raw_payload=raw_payload_str,
-        )
+        if results:
+            return next(iter(results.values()))
 
-        try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.0,
-                ),
-            )
-        except Exception as exc:
-            logger.error("LLM classification call failed: %s", exc)
-            raise LLMClassificationError("LLM API call failed") from exc
-
-        text = _get_response_text(response)
-
-        try:
-            data: dict[str, Any] = json.loads(text)
-        except json.JSONDecodeError as exc:
-            logger.error("LLM returned non-JSON output: %r", text[:300])
-            raise LLMClassificationError("LLM output was not valid JSON") from exc
-
-        result = LLMClassificationResult(
-            request_category=normalize_str_or_none(data.get("request_category")),
-            request_type=normalize_str_or_none(data.get("request_type")),
-            sla_unit=normalize_str_or_none(data.get("sla_unit")),
-            sla_value=normalize_int_or_none(data.get("sla_value")),
-        )
-        logger.debug(
-            "LLM classification result for request %s: %s",
-            getattr(request, "raw_id", None),
-            result,
-        )
-        return result
+        raise LLMClassificationError("LLM returned no results for single request")
 
     def classify_batch(self, requests: list[HelpdeskRequest], catalog: ServiceCatalog) -> dict[
         str, LLMClassificationResult]:
