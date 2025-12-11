@@ -18,6 +18,13 @@ from app.infrastructure.llm_classifier_prompt import LLM_BATCH_PROMPT_TEMPLATE
 logger = logging.getLogger(__name__)
 
 class LLMClassifier:
+    """Wrapper around the Google GenAI client for classifying helpdesk requests.
+
+        Builds a structured batch prompt from the Service Catalog and requests,
+        sends it to the LLM, and maps the JSON response into LLMClassificationResult
+        objects keyed by raw_id.
+        """
+
     def __init__(self, config: LLMConfig) -> None:
         if not config.api_key:
             raise LLMClassificationError("LLM_API_KEY must be configured.")
@@ -26,6 +33,15 @@ class LLMClassifier:
         self._model = config.model_name
 
     def classify_helpdesk_request(self, request: HelpdeskRequest, catalog: ServiceCatalog) -> LLMClassificationResult:
+        """Classify a single helpdesk request using the LLM.
+
+            Internally calls classify_batch with a single-element list, then:
+            - if request.raw_id is set, returns the matching result by raw_id,
+              or raises LLMClassificationError if it is missing from the LLM output;
+            - if request.raw_id is empty, logs a warning and returns the first
+              available classification result.
+            """
+
         results = self.classify_batch([request], catalog)
         raw_id = (request.raw_id or "").strip()
 
@@ -49,6 +65,16 @@ class LLMClassifier:
 
     def classify_batch(self, requests: list[HelpdeskRequest], catalog: ServiceCatalog) -> dict[
         str, LLMClassificationResult]:
+        """Classify a batch of helpdesk requests using the LLM.
+
+            Builds a prompt from the Service Catalog and the given requests, asks
+            the model for JSON output, then validates and converts the 'items' list
+            into a dict keyed by raw_id.
+
+            Raises LLMClassificationError on API failures, invalid JSON, missing
+            'items', empty results, or when all items are rejected as malformed.
+            """
+
         if not requests:
             return {}
 
@@ -138,6 +164,8 @@ class LLMClassifier:
         return results
 
 def _catalog_to_prompt_fragment(catalog: ServiceCatalog) -> str:
+    """Render the Service Catalog into a simple text fragment for the prompt."""
+
     lines: list[str] = []
     for category in catalog.categories:
         for req_type in category.requests:
@@ -150,6 +178,8 @@ def _catalog_to_prompt_fragment(catalog: ServiceCatalog) -> str:
     return "\n".join(lines)
 
 def _build_batch(requests: list[HelpdeskRequest]) -> str:
+    """Build the text block describing all requests for the LLM prompt."""
+
     parts: list[str] = []
     for req in requests:
         raw_payload_str = json.dumps(req.raw_payload or {}, ensure_ascii=False)
@@ -161,6 +191,8 @@ def _build_batch(requests: list[HelpdeskRequest]) -> str:
     return "\n\n---\n\n".join(parts)
 
 def _get_response_text(response: Any) -> str:
+    """Extract non-empty text from the LLM response or raise an error."""
+
     text = getattr(response, "text", None)
     if isinstance(text, str) and text.strip():
         return text

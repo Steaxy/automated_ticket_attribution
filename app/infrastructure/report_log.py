@@ -15,11 +15,18 @@ class ReportLogError(RuntimeError):
     """Raised when the report log cannot be accessed."""
 
 class SQLiteReportLog:
+    """Simple SQLite-based store for marking report files as sent.
+        Uses a 'reports' table keyed by filename to record when a report was sent,
+        so we can avoid sending the same Excel report multiple times.
+        """
+
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
+        """Ensure the SQLite database and 'reports' table exist."""
+
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -40,6 +47,8 @@ class SQLiteReportLog:
             raise ReportLogError("Failed to initialize report log database") from exc
 
     def get_record(self, path: Path) -> Optional[ReportLogRecord]:
+        """Return the stored log record for the given path, or None if missing."""
+
         filename = path.name
 
         try:
@@ -64,6 +73,10 @@ class SQLiteReportLog:
         return ReportLogRecord(filename=filename, created_at=created_at)
 
     def mark_sent(self, path: Path, created_at: Optional[datetime] = None) -> None:
+        """Mark the given report file as sent at the specified (or current) time.
+            If a record already exists for this filename, it is replaced.
+            """
+
         if created_at is None:
             created_at = datetime.now()
 

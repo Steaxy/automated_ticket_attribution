@@ -13,11 +13,21 @@ class ServiceCatalogError(RuntimeError):
     """Raised when the Service Catalog cannot be retrieved, parsed, or validated."""
 
 class ServiceCatalogClient:
+    """HTTP client for downloading and parsing the Service Catalog.
+        Fetches a YAML document from the configured URL and maps it into
+        ServiceCatalog domain objects.
+        """
+
     def __init__(self, config: ServiceCatalogConfig) -> None:
         self._config = config
         self._session = requests.Session()
 
     def fetch_catalog(self) -> ServiceCatalog:
+        """Download and parse the Service Catalog into domain models.
+            Raises ServiceCatalogError on HTTP failures, YAML parse errors, or when
+            the YAML structure does not match the expected schema.
+            """
+
         text = self._download_text()
         data = self._parse_yaml(text)
 
@@ -63,6 +73,8 @@ class ServiceCatalogClient:
         return catalog
 
     def _download_text(self) -> str:
+        """Download the raw YAML text for the Service Catalog."""
+
         try:
             response = self._session.get(
                 self._config.url,
@@ -79,6 +91,8 @@ class ServiceCatalogClient:
         return text
 
     def _parse_yaml(self, text: str) -> Any:
+        """Parse the given YAML text into a Python structure using PyYAML."""
+
         try:
             import yaml
         except ImportError as exc:

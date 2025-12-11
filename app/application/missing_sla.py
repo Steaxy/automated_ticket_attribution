@@ -7,6 +7,13 @@ logger = logging.getLogger(__name__)
 
 # fill missing SLA from service catalog after LLM. Check only if exact category, type match
 def missing_sla(requests: list[HelpdeskRequest], catalog: ServiceCatalog) -> None:
+    """Fill missing SLA fields in-place using the Service Catalog.
+
+        For each request with both request_category and request_type set, looks up an
+        exact (category, request_type) match in the catalog and copies its SLA if the
+        request currently has no sla_unit or sla_value.
+        """
+
     logger.info(
         "Filling missing SLA for %d requests using Service Catalog",
         len(requests),

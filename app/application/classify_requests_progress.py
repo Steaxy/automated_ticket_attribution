@@ -8,6 +8,16 @@ logger = logging.getLogger(__name__)
 
 # display progress for batches when classify_requests in terminal
 def _batches_progress(requests_: list[HelpdeskRequest], batch_size: int, ) -> Iterator[Tuple[int, int, int, int, list[HelpdeskRequest]]]:
+    """Yield batches of requests together with progress metadata.
+
+        This helper splits the incoming list of requests into batches of size
+        ``batch_size`` and logs an info-level message for each batch before it is
+        processed by the LLM classifier.
+
+        If there are no requests, logs that the LLM step is skipped and returns
+        without yielding anything.
+        """
+
     total_requests = len(requests_)
     if total_requests == 0:
         logger.info("[part 3 and 4] No requests to classify; skipping LLM step")

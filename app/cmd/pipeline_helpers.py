@@ -17,6 +17,12 @@ from typing import Iterable
 logger = logging.getLogger(__name__)
 
 def _load_helpdesk_requests(service: HelpdeskService) -> list[HelpdeskRequest]:
+    """Load helpdesk requests via the given service.
+        Logs the number of successfully loaded requests.
+        On failure (when the underlying Helpdesk client raises HelpdeskAPIError),
+        logs an error and terminates the process with SystemExit(1).
+        """
+
     try:
         requests_ = service.load_helpdesk_requests()
     except HelpdeskAPIError as exc:
@@ -27,6 +33,12 @@ def _load_helpdesk_requests(service: HelpdeskService) -> list[HelpdeskRequest]:
     return requests_
 
 def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalog:
+    """Load the Service Catalog from the given client.
+        Logs the number of categories in the loaded catalog.
+        On failure (when the underlying client raises ServiceCatalogError),
+        logs an error and terminates the process with SystemExit(1).
+        """
+
     try:
         service_catalog = catalog_client.fetch_catalog()
     except ServiceCatalogError as exc:
@@ -40,6 +52,11 @@ def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalo
     return service_catalog
 
 def _log_sample_requests(requests_: list[HelpdeskRequest], limit: int = 5) -> None:
+    """Log a small sample of loaded requests for debugging.
+        Logs up to ``limit`` requests, showing their raw IDs and short descriptions.
+        This is intended to give quick visibility into the incoming data shape.
+        """
+
     for req in requests_[:limit]:
         logger.info(
             "[part 1] Request ID=%s short_description=%r",
@@ -51,6 +68,18 @@ def _send_report(
     report_path: list[Path],
     report_log: SQLiteReportLog,
 ) -> None:
+    """Send one or more report files via email and mark them as sent.
+
+        - Loads email configuration and constructs an SMTP sender.
+        - Validates that all report paths exist on disk.
+        - Sends a report email using the shared send_report application helper.
+        - Marks each successfully sent report as 'sent' in the SQLiteReportLog,
+          together with the current timestamp.
+
+        If any report file does not exist, logs an error and terminates
+        the process with SystemExit(1).
+        """
+
     email_config = load_email_config()
     email_sender = SMTPSender(email_config)
 
@@ -85,6 +114,20 @@ def _collect_unsent_reports(
     report_log: SQLiteReportLog,
     explicit_report: str | None,
 ) -> tuple[list[Path], Path | None]:
+    """Collect report files that have not yet been logged as sent.
+
+        If ``explicit_report`` is provided, only that path is considered and
+        returned (if it has no sent record in the log). Otherwise, all ``*.xlsx``
+        files inside ``project_root / "output"`` are scanned and sorted by
+        modification time (oldest first).
+
+        Returns a tuple ``(unsent_report_paths, explicit_report_path)`` where:
+          - ``unsent_report_paths`` is the list of report paths that do not have a
+            corresponding 'sent' record in the log.
+          - ``explicit_report_path`` is the resolved Path for the explicitly
+            provided report, or ``None`` when auto-discovery is used.
+        """
+
     if explicit_report is not None:
         candidates = [Path(explicit_report).resolve()]
         explicit_report_path: Path | None = candidates[0]
@@ -114,6 +157,11 @@ def _collect_unsent_reports(
     return unsent_report_paths, explicit_report_path
 
 def _resolve_report_paths(report_paths: Iterable[Path]) -> list[Path]:
+    """Validate that all given report paths exist and return their absolute paths.
+        Raises FileNotFoundError if any of the paths does not point to an existing
+        file. All returned paths are resolved to absolute Paths.
+    """
+
     paths: list[Path] = []
     for path in report_paths:
         if not path.is_file():

@@ -13,11 +13,21 @@ class HelpdeskAPIError(RuntimeError):
     """Raised when the Service Catalog cannot be retrieved, parsed, or validated."""
 
 class HelpdeskClient:
+    """HTTP client for fetching raw helpdesk requests from the Helpdesk API.
+        Uses the configured URL and credentials to POST a JSON payload and then
+        maps the response into HelpdeskRequest domain objects.
+        """
+
     def __init__(self, config: HelpdeskAPIConfig) -> None:
         self._config = config
         self._session = requests.Session()
 
     def _post_json(self) -> Any:
+        """Call the Helpdesk API and return the parsed JSON body.
+            Raises HelpdeskAPIError if the HTTP request fails or if the response
+            body is not valid JSON.
+            """
+
         payload = {
             "api_key": self._config.api_key,
             "api_secret": self._config.api_secret,
@@ -46,6 +56,12 @@ class HelpdeskClient:
         return self._post_json()
 
     def fetch_requests(self) -> List[HelpdeskRequest]:
+        """Fetch helpdesk requests and map them into HelpdeskRequest objects.
+            Handles several common response shapes, logs basic response metadata,
+            and skips any non-dict items in the payload. Raises HelpdeskAPIError
+            if the response shape is unexpected.
+            """
+
         data = self._post_json()
         logger.info(
             "Raw Helpdesk API response keys: %s",
@@ -77,6 +93,17 @@ class HelpdeskClient:
         return requests_list
 
     def _extract_items(self, data: Any) -> List[Dict[str, Any]]:
+        """Extract a list of item dicts from the raw Helpdesk API JSON.
+
+            Supports responses where the items are:
+            - a top-level list of dicts, or
+            - under data (list), or
+            - under data.requests (list).
+
+            Raises HelpdeskAPIError if the response does not match any of the
+            expected shapes.
+            """
+
         if isinstance(data, list):
             return [item for item in data if isinstance(item, dict)]
 
@@ -114,6 +141,8 @@ class HelpdeskClient:
         raise HelpdeskAPIError(msg)
 
 def _safe_str(value: Any) -> str | None:
+    """Return value as string, or None if the value itself is None."""
+
     if value is None:
         return None
     return str(value)
