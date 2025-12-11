@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from app.cmd.pipeline import _collect_unsent_reports
+from app.cmd.pipeline_service import _collect_unsent_reports
 from app.infrastructure.report_log import SQLiteReportLog
 from typing import cast
 from app.cmd.pipeline_helpers import _resolve_report_paths
