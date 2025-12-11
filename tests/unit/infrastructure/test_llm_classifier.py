@@ -164,3 +164,47 @@ def test_classify_batch_missing_items_raises() -> None:
 
     with pytest.raises(LLMClassificationError):
         classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]
+
+def test_classify_batch_empty_items_list_raises() -> None:
+    payload = {"items": []}
+    response = DummyResponse(text=json.dumps(payload))
+    cfg = DummyLLMConfig()
+    classifier = LLMClassifier(cfg)                                                                                         # type: ignore[arg-type]
+    classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
+
+    catalog = DummyCatalog(categories=[])
+    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+
+    with pytest.raises(LLMClassificationError):
+        classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]
+
+def test_classify_batch_all_items_missing_raw_id_raises() -> None:
+    payload = {
+        "items": [
+            {
+                # raw_id is missing entirely
+                "request_category": "Access Management",
+                "request_type": "Reset forgotten password",
+                "sla_unit": "hours",
+                "sla_value": 4,
+            },
+            {
+                # raw_id is empty / invalid
+                "raw_id": "  ",
+                "request_category": "Hardware Support",
+                "request_type": "Laptop Repair/Replacement",
+                "sla_unit": "days",
+                "sla_value": 7,
+            },
+        ]
+    }
+    response = DummyResponse(text=json.dumps(payload))
+    cfg = DummyLLMConfig()
+    classifier = LLMClassifier(cfg)                                                                                         # type: ignore[arg-type]
+    classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
+
+    catalog = DummyCatalog(categories=[])
+    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+
+    with pytest.raises(LLMClassificationError):
+        classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]

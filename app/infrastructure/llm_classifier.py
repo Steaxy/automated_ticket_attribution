@@ -28,13 +28,24 @@ class LLMClassifier:
     def classify_helpdesk_request(self, request: HelpdeskRequest, catalog: ServiceCatalog) -> LLMClassificationResult:
         results = self.classify_batch([request], catalog)
         raw_id = (request.raw_id or "").strip()
-        if raw_id and raw_id in results:
-            return results[raw_id]
 
-        if results:
-            return next(iter(results.values()))
+        if not results:
+            raise LLMClassificationError(
+                "LLM returned no valid items for single helpdesk request",
+            )
 
-        raise LLMClassificationError("LLM returned no results for single request")
+        if raw_id:
+            if raw_id in results:
+                return results[raw_id]
+            raise LLMClassificationError(
+                f"LLM response missing entry for raw_id={raw_id!r} in single-request call",
+            )
+
+        logger.warning(
+            "HelpdeskRequest without raw_id; using first LLM result as fallback "
+            "for single-request classification",
+        )
+        return next(iter(results.values()))
 
     def classify_batch(self, requests: list[HelpdeskRequest], catalog: ServiceCatalog) -> dict[
         str, LLMClassificationResult]:
@@ -75,14 +86,32 @@ class LLMClassifier:
             logger.error("LLM batch JSON missing 'items' list: %r", data)
             raise LLMClassificationError("LLM batch JSON missing 'items' list")
 
+        if not items:
+            logger.error("LLM batch JSON contained an empty 'items' list: %r", data)
+            raise LLMClassificationError(
+                "LLM batch JSON contained an empty 'items' list",
+            )
+
         results: dict[str, LLMClassificationResult] = {}
-        for item in items:
+
+        # log if skip malformed items to catch format drift early
+        for index, item in enumerate(items):
             if not isinstance(item, dict):
+                logger.warning(
+                    "Skipping non-dict item at index %d in LLM batch JSON: %r",
+                    index,
+                    item,
+                )
                 continue
 
             raw_id_raw = item.get("raw_id")
             raw_id = normalize_str_or_none(raw_id_raw)
             if not raw_id:
+                logger.warning(
+                    "Skipping LLM item without valid 'raw_id' at index %d: %r",
+                    index,
+                    item,
+                )
                 continue
 
             result = LLMClassificationResult(
@@ -92,6 +121,18 @@ class LLMClassifier:
                 sla_value=normalize_int_or_none(item.get("sla_value")),
             )
             results[raw_id] = result
+
+        # if all items were rejected, treat it as a format error
+        if not results:
+            logger.error(
+                "LLM batch JSON contained %d item(s) but no valid results after "
+                "validation. Data: %r",
+                len(items),
+                items,
+            )
+            raise LLMClassificationError(
+                "LLM batch JSON contained no valid items (all missing or invalid 'raw_id')",
+            )
 
         logger.debug("LLM batch classification produced %d items", len(results))
         return results
