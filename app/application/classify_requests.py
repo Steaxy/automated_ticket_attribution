@@ -6,6 +6,7 @@ from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
 from app.application.classify_requests_progress import _batches_progress
+from collections.abc import Sequence
 
 
 logger = logging.getLogger(__name__)
@@ -13,13 +14,19 @@ logger = logging.getLogger(__name__)
 class RequestClassifier(Protocol):
     def classify_batch(
         self,
-        requests: list[HelpdeskRequest],
+        requests: Sequence[HelpdeskRequest],
         service_catalog: ServiceCatalog,
     ) -> Mapping[str, LLMClassificationResult]:
         ...
 
 
-def classify_requests(classifier: RequestClassifier, service_catalog: ServiceCatalog, requests_: list[HelpdeskRequest], batch_size: int, examples_to_log: int = 3) -> list[HelpdeskRequest]:
+def classify_requests(
+        classifier: RequestClassifier,
+        service_catalog: ServiceCatalog,
+        requests_: Sequence[HelpdeskRequest],
+        batch_size: int,
+        examples_to_log: int = 3,
+) -> list[HelpdeskRequest]:
     classified_requests: list[HelpdeskRequest] = []
     logged_examples = 0
 

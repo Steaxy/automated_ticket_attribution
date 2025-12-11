@@ -1,13 +1,17 @@
 from __future__ import annotations
 import logging
-from typing import Iterator, Tuple
+from typing import Tuple
 from app.domain.helpdesk import HelpdeskRequest
+from collections.abc import Iterator, Sequence
 
 
 logger = logging.getLogger(__name__)
 
 # display progress for batches when classify_requests in terminal
-def _batches_progress(requests_: list[HelpdeskRequest], batch_size: int, ) -> Iterator[Tuple[int, int, int, int, list[HelpdeskRequest]]]:
+def _batches_progress(
+        requests_: Sequence[HelpdeskRequest],
+        batch_size: int,
+) -> Iterator[Tuple[int, int, int, int, list[HelpdeskRequest]]]:
     """Yield batches of requests together with progress metadata.
 
         This helper splits the incoming list of requests into batches of size
@@ -26,7 +30,9 @@ def _batches_progress(requests_: list[HelpdeskRequest], batch_size: int, ) -> It
     total_batches = (total_requests + batch_size - 1) // batch_size
 
     for batch_index, batch_start in enumerate(range(0, total_requests, batch_size)):
-        batch = requests_[batch_start: batch_start + batch_size]
+        batch: list[HelpdeskRequest] = list(
+            requests_[batch_start: batch_start + batch_size]
+        )
         batch_end = batch_start + len(batch) - 1
 
         logger.info(

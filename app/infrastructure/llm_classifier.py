@@ -13,6 +13,7 @@ from google import genai
 from google.genai import types
 from app.shared.normalization import normalize_str_or_none, normalize_int_or_none
 from app.infrastructure.llm_classifier_prompt import LLM_BATCH_PROMPT_TEMPLATE
+from typing import Sequence
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class LLMClassifier:
         )
         return next(iter(results.values()))
 
-    def classify_batch(self, requests: list[HelpdeskRequest], catalog: ServiceCatalog) -> dict[
+    def classify_batch(self,requests: Sequence[HelpdeskRequest], catalog: ServiceCatalog) -> dict[
         str, LLMClassificationResult]:
         """Classify a batch of helpdesk requests using the LLM.
 
@@ -78,8 +79,9 @@ class LLMClassifier:
         if not requests:
             return {}
 
+        requests_list: list[HelpdeskRequest] = list(requests)
         catalog_fragment = _catalog_to_prompt_fragment(catalog)
-        requests_block = _build_batch(requests)
+        requests_block = _build_batch(requests_list)
 
         prompt = LLM_BATCH_PROMPT_TEMPLATE.format(
             catalog=catalog_fragment,

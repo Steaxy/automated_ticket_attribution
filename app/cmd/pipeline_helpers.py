@@ -11,12 +11,12 @@ from app.application.send_report import send_report
 from datetime import datetime
 from pathlib import Path
 from app.infrastructure.report_log import SQLiteReportLog
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 logger = logging.getLogger(__name__)
 
-def _load_helpdesk_requests(service: HelpdeskService) -> list[HelpdeskRequest]:
+def _load_helpdesk_requests(service: HelpdeskService) -> Sequence[HelpdeskRequest]:
     """Load helpdesk requests via the given service.
         Logs the number of successfully loaded requests.
         On failure (when the underlying Helpdesk client raises HelpdeskAPIError),
@@ -51,7 +51,7 @@ def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalo
     )
     return service_catalog
 
-def _log_sample_requests(requests_: list[HelpdeskRequest], limit: int = 5) -> None:
+def _log_sample_requests(requests_: Sequence[HelpdeskRequest], limit: int = 5) -> None:
     """Log a small sample of loaded requests for debugging.
         Logs up to ``limit`` requests, showing their raw IDs and short descriptions.
         This is intended to give quick visibility into the incoming data shape.
