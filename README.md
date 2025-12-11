@@ -3,39 +3,45 @@
 Project implements a small automation pipeline that simulates
 automatic classification of IT helpdesk tickets based on an IT Service Catalog.
 
-The goal is to:
-- Fetch raw helpdesk requests.
-- Fetch the Service Catalog.
-- Use an LLM to classify tickets into `request_category`, `request_type`, and `sla`.
-- Export the final dataset to an Excel report.
-- Send the report via email.
-- **PS**. Don’t fetch data or call the LLM if there are any unsent reports; resend all unsent reports instead.
+## Features / Pipeline overview
+
+- Fetch helpdesk requests from the webhook endpoint using API key + secret.
+- Fetch the Service Catalog (YAML) from a remote URL.
+- Batch requests to the LLM (configurable batch size, default 30).
+- Let the LLM fill `request_category`, `request_type`, `sla_unit`, `sla_value` based on the Service Catalog.
+- Generate a sorted Excel report with basic formatting.
+- Send the report via SMTP to the configured recipient, including a link to the codebase.
+- Track sent reports in a SQLite database and resend any unsent reports from the `output/` directory
+  before calling the Helpdesk API or the LLM.
+- Log all key steps via Python `logging` and provide a simple terminal progress indicator (spinner).
+- Covered by unit tests (pytest) and static checks (ruff, mypy).
 
 ---
 ## Assumptions and open questions
 
-In a real production setup I would clarify a few points about the Service Catalog:
+This project makes a few pragmatic assumptions about the Service Catalog and LLM behavior.
+For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
+and security considerations), see [`DESIGN_NOTES.md`](DESIGN_NOTES.md).
 
-- Whether `SaaS Platform Access (Jira/Salesforce)` is meant to be **generic for all core SaaS tools** or strictly for Jira/Salesforce only.
-- How we want to classify incidents for other SaaS products like Zoom, Slack, etc.:
-  - Should they reuse the same SaaS request type and SLA?
-  - Or should they fall under a more generic `Other Software Issue` until the catalog is extended?
-- Who owns the Service Catalog and how new applications (e.g. Zoom) are added with their own request types and SLAs.
+In short:
 
-For this technical task I assumed:
-- For the "Zoom not working" request, the long description says "Camera isn't detected in Zoom".
-  I treat this as an endpoint/device/configuration issue (camera/drivers/permissions),
-  not as a SaaS availability or access problem. Since Zoom is not explicitly mentioned
-  in the Service Catalog and the issue is about the local camera rather than Zoom being
-  down or access provisioning, I classify it as `Software & Licensing / Other Software Issue`
-  with the corresponding SLA (24 hours).
+- `SaaS Platform Access (Jira/Salesforce)` is treated as specific to Jira and Salesforce,
+  not as a generic bucket for all SaaS tools.
+- Jira/Salesforce incidents (including outages like "Jira is down") are mapped to
+  `Software & Licensing / SaaS Platform Access (Jira/Salesforce)` with the catalog SLA (8 hours).
+- Zoom is not present in the Service Catalog. For the "Zoom not working" request, the long
+  description says "Camera isn't detected in Zoom". I treat this as an endpoint/device/configuration
+  issue (camera/drivers/permissions) rather than a SaaS availability or access problem, so it is
+  classified as `Software & Licensing / Other Software Issue` with SLA 24 hours.
 ---
 ## Tech Stack
 
 - Python 3.10
+- Google Gemini 2.5 Pro (LLM for classification)
+- Clean Architecture (domain / application / infrastructure / entrypoint)
 
 ---
-## Project Structure
+## Structure
 
 ```text
 automated_ticket_attribution/
