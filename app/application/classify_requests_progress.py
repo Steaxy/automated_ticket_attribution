@@ -15,10 +15,8 @@ def _batches_progress(requests_: list[HelpdeskRequest], batch_size: int, ) -> It
 
     total_batches = (total_requests + batch_size - 1) // batch_size
 
-    for batch_index, batch_start in enumerate(
-        range(0, total_requests, batch_size),
-    ):
-        batch = requests_[batch_start : batch_start + batch_size]
+    for batch_index, batch_start in enumerate(range(0, total_requests, batch_size)):
+        batch = requests_[batch_start: batch_start + batch_size]
         batch_end = batch_start + len(batch) - 1
 
         logger.info(
