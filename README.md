@@ -12,6 +12,24 @@ The goal is to:
 - **PS**. Don’t fetch data or call the LLM if there are any unsent reports; resend all unsent reports instead.
 
 ---
+## Assumptions and open questions
+
+In a real production setup I would clarify a few points about the Service Catalog:
+
+- Whether `SaaS Platform Access (Jira/Salesforce)` is meant to be **generic for all core SaaS tools** or strictly for Jira/Salesforce only.
+- How we want to classify incidents for other SaaS products like Zoom, Slack, etc.:
+  - Should they reuse the same SaaS request type and SLA?
+  - Or should they fall under a more generic `Other Software Issue` until the catalog is extended?
+- Who owns the Service Catalog and how new applications (e.g. Zoom) are added with their own request types and SLAs.
+
+For this technical task I assumed:
+- For the "Zoom not working" request, the long description says "Camera isn't detected in Zoom".
+  I treat this as an endpoint/device/configuration issue (camera/drivers/permissions),
+  not as a SaaS availability or access problem. Since Zoom is not explicitly mentioned
+  in the Service Catalog and the issue is about the local camera rather than Zoom being
+  down or access provisioning, I classify it as `Software & Licensing / Other Software Issue`
+  with the corresponding SLA (24 hours).
+---
 ## Tech Stack
 
 - Python 3.10
