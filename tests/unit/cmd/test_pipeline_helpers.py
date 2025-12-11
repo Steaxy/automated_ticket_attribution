@@ -3,6 +3,8 @@ from pathlib import Path
 from app.cmd.pipeline import _collect_unsent_reports
 from app.infrastructure.report_log import SQLiteReportLog
 from typing import cast
+from app.cmd.pipeline_helpers import _resolve_report_paths
+import pytest
 
 
 class _FakeRecord:
@@ -94,3 +96,16 @@ def test_collect_unsent_reports_no_output_dir(tmp_path):
 
     assert unsent == []
     assert explicit is None
+
+def test_resolve_report_paths_ok(tmp_path: Path) -> None:
+    report = tmp_path / "report.xlsx"
+    report.write_bytes(b"dummy")
+    result = _resolve_report_paths([report])
+    assert result == [report.resolve()]
+
+
+def test_resolve_report_paths_missing_file(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.xlsx"
+
+    with pytest.raises(FileNotFoundError):
+        _resolve_report_paths([missing])
