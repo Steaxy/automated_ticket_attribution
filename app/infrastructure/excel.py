@@ -106,7 +106,16 @@ def _auto_fit_columns(ws: Worksheet) -> None:
 
     for column_cells in ws.columns:
         first_cell = column_cells[0]
-        column_letter = get_column_letter(first_cell.column)
+        col_index = first_cell.column
+        if not isinstance(col_index, int):
+            logger.warning(
+                "Unexpected column index type %r for cell %r; skipping column",
+                col_index,
+                first_cell,
+            )
+            continue
+
+        column_letter = get_column_letter(col_index)
 
         max_length = 0
         for cell in column_cells:

@@ -51,7 +51,7 @@ class LLMConfig:
     batch_size: int
 
 def load_llm_config() -> LLMConfig:
-    model_name = os.getenv("LLM_MODEL_NAME")
+    model_name = _get_required_env("LLM_MODEL_NAME")
     api_key = _get_required_env("GEMINI_API_KEY")
 
     batch_size_str = os.getenv("LLM_BATCH_SIZE", "30")
@@ -79,22 +79,19 @@ class EmailConfig:
     candidate_name: str
 
 def load_email_config() -> EmailConfig:
-    smtp_host = os.getenv("EMAIL_SMTP_HOST")
-    smtp_port_str = os.getenv("EMAIL_SMTP_PORT")
-    use_tls_str = os.getenv("EMAIL_USE_TLS")
+    smtp_host = _get_required_env("EMAIL_SMTP_HOST")
+    smtp_port_str = _get_required_env("EMAIL_SMTP_PORT")
+    use_tls_str = os.getenv("EMAIL_USE_TLS", "true")
 
     username = _get_required_env("EMAIL_USERNAME")
     password = _get_required_env("EMAIL_PASSWORD")
-
-    if not username or not password:
-        raise RuntimeError("EMAIL_USERNAME and EMAIL_PASSWORD must be set in the environment.")
 
     smtp_port = int(smtp_port_str)
     use_tls = use_tls_str.lower() in ("1", "true", "yes", "y")
 
     sender = os.getenv("EMAIL_SENDER", username)
-    recipient = os.getenv("EMAIL_RECIPIENT")
-    candidate_name = os.getenv("CANDIDATE_NAME")
+    recipient = _get_required_env("EMAIL_RECIPIENT")
+    candidate_name = _get_required_env("CANDIDATE_NAME")
 
     return EmailConfig(
         smtp_host=smtp_host,
@@ -112,5 +109,5 @@ class ReportLogConfig:
     db_path: str
 
 def load_report_log_config() -> ReportLogConfig:
-    db_path = os.getenv("REPORT_LOG_DB_PATH")
+    db_path = _get_required_env("REPORT_LOG_DB_PATH")
     return ReportLogConfig(db_path=db_path)
