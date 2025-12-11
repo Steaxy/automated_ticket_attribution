@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import Mapping, Dict, List
-import pytest
 from app.application.classify_requests import classify_requests
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
+from collections.abc import Sequence
 
 
 # construct a valid HelpdeskRequest
@@ -20,9 +20,13 @@ class FakeClassifier:
         self._results_by_id = results_by_id
         self._fail_on_call = fail_on_call
         self.calls: int = 0
-        self.batches: List[list[HelpdeskRequest]] = []
+        self.batches: List[Sequence[HelpdeskRequest]] = []
 
-    def classify_batch(self, requests: list[HelpdeskRequest], service_catalog: ServiceCatalog) -> Mapping[str, LLMClassificationResult]:
+    def classify_batch(
+        self,
+        requests: Sequence[HelpdeskRequest],
+        service_catalog: ServiceCatalog,
+    ) -> Mapping[str, LLMClassificationResult]:
         self.calls += 1
         self.batches.append(requests)
 
@@ -36,13 +40,7 @@ class FakeClassifier:
         }
 
 # all requests classified, no errors
-def test_classify_requests_with_llm_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    # disable real sleeping
-    monkeypatch.setattr(
-        "app.application.classify_requests.time.sleep",
-        lambda _seconds: None,
-    )
-
+def test_classify_requests_with_llm_happy_path() -> None:
     req1 = _make_request("r1")
     req2 = _make_request("r2")
     requests = [req1, req2]
@@ -91,14 +89,8 @@ def test_classify_requests_with_llm_happy_path(monkeypatch: pytest.MonkeyPatch) 
     # classifier was called once
     assert classifier.calls == 1
 
-
 # batch failure – first batch ok, second batch fails, but all requests returned
-def test_classify_requests_with_llm_batch_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.application.classify_requests.time.sleep",
-        lambda _seconds: None,
-    )
-
+def test_classify_requests_with_llm_batch_failure() -> None:
     # three requests, batch_size=2 -> 2 batches
     req1 = _make_request("r1")
     req2 = _make_request("r2")

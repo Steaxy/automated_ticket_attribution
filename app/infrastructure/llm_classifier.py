@@ -14,6 +14,7 @@ from google.genai import types
 from app.shared.normalization import normalize_str_or_none, normalize_int_or_none
 from app.infrastructure.llm_classifier_prompt import LLM_BATCH_PROMPT_TEMPLATE
 from typing import Sequence
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,11 @@ class LLMClassifier:
 
         self._client = genai.Client(api_key=config.api_key)
         self._model = config.model_name
+        self._delay_between_batches: float = getattr(
+            config,
+            "delay_between_batches",
+            2.0,
+        )
 
     def classify_helpdesk_request(self, request: HelpdeskRequest, catalog: ServiceCatalog) -> LLMClassificationResult:
         """Classify a single helpdesk request using the LLM.
@@ -163,6 +169,14 @@ class LLMClassifier:
             )
 
         logger.debug("LLM batch classification produced %d items", len(results))
+
+        if self._delay_between_batches > 0:
+            logger.debug(
+                "Sleeping %.2f seconds between LLM batches",
+                self._delay_between_batches,
+            )
+            time.sleep(self._delay_between_batches)
+
         return results
 
 def _catalog_to_prompt_fragment(catalog: ServiceCatalog) -> str:

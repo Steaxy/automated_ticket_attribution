@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import time
 from typing import Protocol, Mapping
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
@@ -27,6 +26,10 @@ def classify_requests(
         batch_size: int,
         examples_to_log: int = 3,
 ) -> list[HelpdeskRequest]:
+    if not requests_:
+        logger.info("[part 3 and 4] No helpdesk requests provided; skipping LLM step")
+        return []
+
     classified_requests: list[HelpdeskRequest] = []
     logged_examples = 0
 
@@ -78,8 +81,5 @@ def classify_requests(
                 logged_examples += 1
 
             classified_requests.append(req)
-
-        # batch every 3 sec
-        time.sleep(3)
 
     return classified_requests
