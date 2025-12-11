@@ -11,6 +11,7 @@ from app.application.send_report import send_report
 from datetime import datetime
 from pathlib import Path
 from app.infrastructure.report_log import SQLiteReportLog
+from typing import Iterable
 
 
 logger = logging.getLogger(__name__)
@@ -47,22 +48,24 @@ def _log_sample_requests(requests_: list[HelpdeskRequest], limit: int = 5) -> No
         )
 
 def _send_report(
-    reports: list[Path],
+    report_path: list[Path],
     report_log: SQLiteReportLog,
 ) -> None:
     email_config = load_email_config()
     email_sender = SMTPSender(email_config)
 
+    attachment_paths = _resolve_report_paths(report_path)
+
     send_report(
         email_sender=email_sender,
-        reports=[str(p) for p in reports],
+        attachment_paths=attachment_paths,
         codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
         candidate_name=email_config.candidate_name,
     )
 
-    # mark report as sent after successful email
+    # mark the resolved paths as sent
     now = datetime.now()
-    for report in reports:
+    for report in attachment_paths:
         report_log.mark_sent(report, created_at=now)
         logger.info(
             "Classified report %s marked as sent in log at %s",
@@ -89,11 +92,11 @@ def _collect_unsent_reports(
         )
         explicit_report_path = None
 
-    unsent_reports: list[Path] = []
+    unsent_report_paths: list[Path] = []
     for candidate in candidates:
         record = report_log.get_record(candidate)
         if record is None:
-            unsent_reports.append(candidate)
+            unsent_report_paths.append(candidate)
         else:
             logger.info(
                 "Classified report %s was already sent at %s",
@@ -101,4 +104,12 @@ def _collect_unsent_reports(
                 record.created_at.isoformat(sep=" ", timespec="seconds"),
             )
 
-    return unsent_reports, explicit_report_path
+    return unsent_report_paths, explicit_report_path
+
+def _resolve_report_paths(report_paths: Iterable[Path]) -> list[Path]:
+    paths: list[Path] = []
+    for path in report_paths:
+        if not path.is_file():
+            raise FileNotFoundError(f"Report file does not exist: {path}")
+        paths.append(path.resolve())
+    return paths

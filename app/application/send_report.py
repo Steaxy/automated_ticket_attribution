@@ -18,18 +18,10 @@ class ReportEmailSender(Protocol):
 
 def send_report(
     email_sender: ReportEmailSender,
-    reports: list[str],
+    attachment_paths: list[Path],
     codebase_url: str,
     candidate_name: str,
 ) -> None:
-    # convert string paths to Path objects
-    attachment_paths: list[Path] = []
-    for report_path in reports:
-        path = Path(report_path)
-        if not path.is_file():
-            raise FileNotFoundError(f"Report file does not exist: {path}")
-        attachment_paths.append(path)
-
     subject = f"Automation Engineer interview - technical task - {candidate_name}"
 
     body = build_email_body(

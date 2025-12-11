@@ -26,7 +26,7 @@ from app.cmd.pipeline_helpers import (
 
 logger = logging.getLogger(__name__)
 
-def pipeline(report: str | None = None) -> None:
+def pipeline(explicit_report_path: str | None = None) -> None:
 
     # check if the report was already sent
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -39,10 +39,10 @@ def pipeline(report: str | None = None) -> None:
     report_log = SQLiteReportLog(db_path)
 
     # check if any reports were unsent
-    unsent_reports, explicit_report_path = _collect_unsent_reports(
+    unsent_reports, explicit_report_path_obj = _collect_unsent_reports(
         project_root=project_root,
         report_log=report_log,
-        explicit_report=report,
+        explicit_report=explicit_report_path,
     )
 
     # send all unsent reports if any
@@ -55,10 +55,10 @@ def pipeline(report: str | None = None) -> None:
         return
 
     # if a specific report is already logged as sent — nothing to do
-    if explicit_report_path is not None:
+    if explicit_report_path_obj is not None:
         logger.info(
             "Explicit report %s is already logged as sent and no unsent reports remain",
-            explicit_report_path,
+            explicit_report_path_obj,
         )
         return
 
@@ -93,7 +93,7 @@ def pipeline(report: str | None = None) -> None:
 
     _log_sample_requests(requests_)
 
-    report = Path(excel).resolve()
+    report_path = Path(excel).resolve()
 
     # [part 6] send the report to email
-    _send_report([report], report_log)
+    _send_report([report_path], report_log)
