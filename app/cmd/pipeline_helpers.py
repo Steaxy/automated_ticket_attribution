@@ -15,14 +15,13 @@ from app.shared.errors import ServiceCatalogLoadError
 logger = logging.getLogger(__name__)
 
 def _load_service_catalog(client: ServiceCatalogClientPort) -> ServiceCatalog:
-    """Logs the number of categories in the loaded catalog.
-        """
+    """Logs the number of categories in the loaded catalog."""
 
     try:
         service_catalog = client.fetch_catalog()
     except ServiceCatalogLoadError as exc:
         logger.error("Failed to load Service Catalog: %s", exc)
-        raise SystemExit(1) from exc
+        raise
 
     logger.info(
         "Service Catalog loaded: %d categories",
@@ -50,17 +49,7 @@ def _send_report(
     codebase_url: str,
     candidate_name: str,
 ) -> None:
-    """Send one or more report files via email and mark them as sent.
-
-        - Loads email configuration and constructs an SMTP sender.
-        - Validates that all report paths exist on disk.
-        - Sends a report email using the shared send_report application helper.
-        - Marks each successfully sent report as 'sent' in the SQLiteReportLog,
-          together with the current timestamp.
-
-        If any report file does not exist, logs an error and terminates
-        the process with SystemExit(1).
-        """
+    """Send one or more report files via injected ports and mark them as sent."""
 
     try:
         attachment_paths = _resolve_report_paths(report_paths)
@@ -140,7 +129,7 @@ def _resolve_report_paths(report_paths: Iterable[Path]) -> list[Path]:
     """Validate that all given report paths exist and return their absolute paths.
         Raises FileNotFoundError if any of the paths does not point to an existing
         file. All returned paths are resolved to absolute Paths.
-    """
+        """
 
     paths: list[Path] = []
     for path in report_paths:
