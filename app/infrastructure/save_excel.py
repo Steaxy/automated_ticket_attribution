@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from app.domain.helpdesk import HelpdeskRequest
-from app.infrastructure.excel import build_excel, ExcelReportError
+from app.infrastructure.build_excel import build_excel, ExcelReportError
 
 
 logger = logging.getLogger(__name__)

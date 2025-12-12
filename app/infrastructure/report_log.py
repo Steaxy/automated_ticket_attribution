@@ -16,8 +16,6 @@ class ReportLogError(RuntimeError):
 
 class SQLiteReportLog:
     """Simple SQLite-based store for marking report files as sent.
-        Uses a 'reports' table keyed by filename to record when a report was sent,
-        so we can avoid sending the same Excel report multiple times.
         """
 
     def __init__(self, db_path: Path) -> None:
@@ -73,7 +71,7 @@ class SQLiteReportLog:
         return ReportLogRecord(filename=filename, created_at=created_at)
 
     def mark_sent(self, path: Path, created_at: Optional[datetime] = None) -> None:
-        """Mark the given report file as sent at the specified (or current) time.
+        """Mark the given report file as sent at the current time.
             If a record already exists for this filename, it is replaced.
             """
 

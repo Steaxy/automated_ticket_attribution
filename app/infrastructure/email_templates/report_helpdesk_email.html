@@ -1,31 +1,10 @@
-from __future__ import annotations
-from html import escape
-
-
-def build_text_email_body(
-    codebase_url: str,
-    candidate_name: str,
-) -> str:
-    return (
-        "Hi,\n\n"
-        "Please find attached the classified helpdesk requests report.\n\n"
-        f"Codebase: {codebase_url}\n\n"
-        "Best regards,\n"
-        f"{candidate_name}\n"
-    )
-
-def build_html_email_body(
-    codebase_url: str,
-    candidate_name: str,
-) -> str:
-    return f"""
 <html>
   <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4;">
     <p>Hi,</p>
 
     <p>Please find attached the classified helpdesk requests report.</p>
 
-    <p><strong>Codebase:</strong> <a href="{escape(codebase_url)}">{escape(codebase_url)}</a></p>
+    <p><strong>Codebase:</strong> <a href="{codebase_url}">{codebase_url}</a></p>
 
     <p><strong>Overview of the script:</strong></p>
     <ul>
@@ -72,21 +51,6 @@ def build_html_email_body(
     <p>This is the kind of clarification I would normally discuss with stakeholders in a real project.</p>
 
     <p>Best regards,<br/>
-       {escape(candidate_name)}</p>
+       {candidate_name}</p>
   </body>
 </html>
-""".strip()
-
-def build_email_body(
-    codebase_url: str,
-    candidate_name: str,
-) -> tuple[str, str]:
-    text_body = build_text_email_body(
-        codebase_url=codebase_url,
-        candidate_name=candidate_name,
-    )
-    html_body = build_html_email_body(
-        codebase_url=codebase_url,
-        candidate_name=candidate_name,
-    )
-    return text_body, html_body

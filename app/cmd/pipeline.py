@@ -13,6 +13,7 @@ from app.infrastructure.llm_classifier import LLMClassifier
 from pathlib import Path
 from app.infrastructure.report_log import SQLiteReportLog
 from app.cmd.pipeline_service import run_pipeline, PipelineDeps
+from app.infrastructure.email_templates.email_body_builder import TemplateEmailBodyBuilder
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,9 @@ def _build_pipeline_deps() -> PipelineDeps:
     llm_config = load_llm_config()
     llm_classifier = LLMClassifier(llm_config)
 
+    # email body builder (templates)
+    email_body_builder = TemplateEmailBodyBuilder()
+
     return PipelineDeps(
         project_root=project_root,
         helpdesk_service=helpdesk_service,
@@ -47,6 +51,7 @@ def _build_pipeline_deps() -> PipelineDeps:
         llm_classifier=llm_classifier,
         report_log=report_log,
         batch_size=llm_config.batch_size,
+        email_body_builder=email_body_builder,
     )
 
 def pipeline(explicit_report_path: str | None = None) -> None:

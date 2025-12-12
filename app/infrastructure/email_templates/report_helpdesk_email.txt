@@ -1,0 +1,8 @@
+Hi,
+
+Please find attached the classified helpdesk requests report.
+
+Codebase: {codebase_url}
+
+Best regards,
+{candidate_name}

@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Protocol
-from app.application.send_report_email_template import build_email_body
+from app.application.ports.email_body_builder_port import EmailBodyBuilder
 
 
 logger = logging.getLogger(__name__)
@@ -19,13 +19,14 @@ class ReportEmailSender(Protocol):
 
 def send_report(
     email_sender: ReportEmailSender,
+    body_builder: EmailBodyBuilder,
     attachment_paths: list[Path],
     codebase_url: str,
     candidate_name: str,
 ) -> None:
     subject = f"Automation Engineer interview - technical task - {candidate_name}"
 
-    text_body, html_body = build_email_body(
+    text_body, html_body = body_builder.build(
         codebase_url=codebase_url,
         candidate_name=candidate_name,
     )

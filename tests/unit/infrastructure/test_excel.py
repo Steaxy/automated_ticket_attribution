@@ -2,7 +2,7 @@ from __future__ import annotations
 from io import BytesIO
 from openpyxl import load_workbook
 from app.domain.helpdesk import HelpdeskRequest
-from app.infrastructure.excel import build_excel
+from app.infrastructure.build_excel import build_excel
 
 
 # build a HelpdeskRequest

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from app.application.missing_sla import missing_sla
+from app.application.missing_helpdesk_sla import missing_sla
 
 
 @dataclass

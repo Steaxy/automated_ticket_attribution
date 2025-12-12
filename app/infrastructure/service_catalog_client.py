@@ -128,7 +128,7 @@ class ServiceCatalogClient:
         return text
 
     def _parse_yaml(self, text: str) -> Any:
-        """Parse the given YAML text into a Python structure using PyYAML."""
+        """Parse the given YAML text into a Python structure"""
 
         try:
             import yaml

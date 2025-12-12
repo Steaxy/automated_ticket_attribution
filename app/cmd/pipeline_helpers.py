@@ -3,22 +3,22 @@ import logging
 from app.infrastructure.helpdesk_client import HelpdeskAPIError
 from app.application.helpdesk_services import HelpdeskService
 from app.infrastructure.config_loader import load_email_config
-from app.infrastructure.service_catalog_client import ServiceCatalogClient, ServiceCatalogError
+from app.infrastructure.service_catalog_client import ServiceCatalogError
 from app.domain.helpdesk import HelpdeskRequest
-from app.domain.service_catalog import ServiceCatalog
 from app.infrastructure.email_sender import SMTPSender
 from app.application.send_report import send_report
 from datetime import datetime
 from pathlib import Path
-from app.infrastructure.report_log import SQLiteReportLog
 from typing import Iterable, Sequence
+from app.application.ports.email_body_builder_port import EmailBodyBuilder
+from app.cmd.ports import ReportLogPort, ServiceCatalogClientPort
+from app.domain.service_catalog import ServiceCatalog
 
 
 logger = logging.getLogger(__name__)
 
 def _load_helpdesk_requests(service: HelpdeskService) -> Sequence[HelpdeskRequest]:
-    """Load helpdesk requests via the given service.
-        Logs the number of successfully loaded requests.
+    """Logs the number of successfully loaded requests.
         On failure (when the underlying Helpdesk client raises HelpdeskAPIError),
         logs an error and terminates the process with SystemExit(1).
         """
@@ -32,15 +32,14 @@ def _load_helpdesk_requests(service: HelpdeskService) -> Sequence[HelpdeskReques
     logger.info("Successfully loaded %d requests", len(requests_))
     return requests_
 
-def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalog:
-    """Load the Service Catalog from the given client.
-        Logs the number of categories in the loaded catalog.
+def _load_service_catalog(client: ServiceCatalogClientPort) -> ServiceCatalog:
+    """Logs the number of categories in the loaded catalog.
         On failure (when the underlying client raises ServiceCatalogError),
         logs an error and terminates the process with SystemExit(1).
         """
 
     try:
-        service_catalog = catalog_client.fetch_catalog()
+        service_catalog = client.fetch_catalog()
     except ServiceCatalogError as exc:
         logger.error("Failed to load Service Catalog: %s", exc)
         raise SystemExit(1) from exc
@@ -52,8 +51,7 @@ def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalo
     return service_catalog
 
 def _log_sample_requests(requests_: Sequence[HelpdeskRequest], limit: int = 5) -> None:
-    """Log a small sample of loaded requests for debugging.
-        Logs up to ``limit`` requests, showing their raw IDs and short descriptions.
+    """Logs up to ``limit`` requests, showing their raw IDs and short descriptions.
         This is intended to give quick visibility into the incoming data shape.
         """
 
@@ -66,7 +64,8 @@ def _log_sample_requests(requests_: Sequence[HelpdeskRequest], limit: int = 5) -
 
 def _send_report(
     report_path: list[Path],
-    report_log: SQLiteReportLog,
+    report_log: ReportLogPort,
+    body_builder: EmailBodyBuilder,
 ) -> None:
     """Send one or more report files via email and mark them as sent.
 
@@ -94,6 +93,7 @@ def _send_report(
 
     send_report(
         email_sender=email_sender,
+        body_builder=body_builder,
         attachment_paths=attachment_paths,
         codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
         candidate_name=email_config.candidate_name,
@@ -111,7 +111,7 @@ def _send_report(
 
 def _collect_unsent_reports(
     project_root: Path,
-    report_log: SQLiteReportLog,
+    report_log: ReportLogPort,
     explicit_report: str | None,
 ) -> tuple[list[Path], Path | None]:
     """Collect report files that have not yet been logged as sent.

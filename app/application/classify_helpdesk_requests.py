@@ -4,7 +4,7 @@ from typing import Protocol, Mapping
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
-from app.application.classify_requests_progress import _batches_progress
+from app.application.classify_helpdesk_requests_progress import _batches_progress
 from collections.abc import Sequence
 
 

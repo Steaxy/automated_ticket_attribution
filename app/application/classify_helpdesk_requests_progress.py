@@ -14,7 +14,7 @@ def _batches_progress(
 ) -> Iterator[Tuple[int, int, int, int, list[HelpdeskRequest]]]:
     """Yield batches of requests together with progress metadata.
 
-        This helper splits the incoming list of requests into batches of size
+        Splits the incoming list of requests into batches of size
         ``batch_size`` and logs an info-level message for each batch before it is
         processed by the LLM classifier.
 

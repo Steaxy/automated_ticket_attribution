@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Mapping, Dict, List
-from app.application.classify_requests import classify_requests
+from app.application.classify_helpdesk_requests import classify_requests
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog

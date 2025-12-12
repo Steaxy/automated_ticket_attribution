@@ -1,14 +1,10 @@
 from __future__ import annotations
 import logging
-from app.application.helpdesk_services import HelpdeskService
-from app.infrastructure.service_catalog_client import ServiceCatalogClient
-from app.infrastructure.llm_classifier import LLMClassifier
-from app.application.missing_sla import missing_sla
-from app.application.classify_requests import classify_requests
+from app.application.missing_helpdesk_sla import missing_sla
+from app.application.classify_helpdesk_requests import classify_requests
 from app.cmd.spinner import Spinner
 from app.infrastructure.save_excel import save_excel
 from pathlib import Path
-from app.infrastructure.report_log import SQLiteReportLog
 from app.cmd.pipeline_helpers import (
     _load_service_catalog,
     _log_sample_requests,
@@ -16,7 +12,10 @@ from app.cmd.pipeline_helpers import (
     _collect_unsent_reports,
 )
 from dataclasses import dataclass
-from app.infrastructure.excel import ExcelReportError
+from app.infrastructure.build_excel import ExcelReportError
+from app.application.ports.email_body_builder_port import EmailBodyBuilder
+from app.application.classify_helpdesk_requests import RequestClassifier
+from app.cmd.ports import ReportLogPort, ServiceCatalogClientPort, HelpdeskServicePort
 
 
 logger = logging.getLogger(__name__)
@@ -24,11 +23,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PipelineDeps:
     project_root: Path
-    helpdesk_service: HelpdeskService
-    service_catalog_client: ServiceCatalogClient
-    llm_classifier: LLMClassifier
-    report_log: SQLiteReportLog
+    helpdesk_service: HelpdeskServicePort
+    service_catalog_client: ServiceCatalogClientPort
+    llm_classifier: RequestClassifier
+    report_log: ReportLogPort
     batch_size: int
+    email_body_builder: EmailBodyBuilder
 
 def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) -> None:
     project_root = deps.project_root
@@ -47,7 +47,7 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
             "Found %d unsent report(s); sending them without calling LLM",
             len(unsent_reports),
         )
-        _send_report(unsent_reports, report_log)
+        _send_report(unsent_reports, report_log, deps.email_body_builder)
         return
 
     # if a specific report is already logged as sent — nothing to do
@@ -88,4 +88,4 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
     report_path = Path(excel_path_str).resolve()
 
     # [part 6] send the report to email
-    _send_report([report_path], report_log)
+    _send_report([report_path], report_log, deps.email_body_builder)
