@@ -1,13 +1,13 @@
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
 
 
-@dataclass
+@dataclass(slots=True)
 class HelpdeskRequest:
-    raw_id: Optional[str]
-    short_description: Optional[str]
-    raw_payload: Dict[str, Any]
-    request_category: Optional[str] = None
-    request_type: Optional[str] = None
-    sla_unit: Optional[str] = None
-    sla_value: Optional[int] = None
+    id: str | None
+    short_description: str | None
+    long_description: str | None = None
+    request_category: str | None = None
+    request_type: str | None = None
+    sla_unit: str | None = None
+    sla_value: int | None = None

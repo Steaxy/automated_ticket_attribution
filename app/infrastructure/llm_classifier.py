@@ -11,7 +11,7 @@ from app.domain.service_catalog import ServiceCatalog
 from app.config import LLMConfig
 from google import genai
 from google.genai import types
-from app.shared.normalization import normalize_str_or_none, normalize_int_or_none
+from app.shared.normalization import normalize_str_or_none
 from app.infrastructure.llm_classifier_prompt import LLM_BATCH_PROMPT_TEMPLATE
 from typing import Sequence
 import time
@@ -24,48 +24,45 @@ class LLMClassifier:
 
         Builds a structured batch prompt from the Service Catalog and requests,
         sends it to the LLM, and maps the JSON response into LLMClassificationResult
-        objects keyed by raw_id.
+        objects keyed by id.
         """
 
     def __init__(self, config: LLMConfig) -> None:
         if not config.api_key:
             raise LLMClassificationError("LLM_API_KEY must be configured.")
 
+        self._config = config
         self._client = genai.Client(api_key=config.api_key)
         self._model = config.model_name
-        self._delay_between_batches: float = getattr(
-            config,
-            "delay_between_batches",
-            2.0,
-        )
+        self._delay_between_batches: float = config.delay_between_batches
 
     def classify_helpdesk_request(self, request: HelpdeskRequest, catalog: ServiceCatalog) -> LLMClassificationResult:
         """Classify a single helpdesk request using the LLM.
 
             Internally calls classify_batch with a single-element list, then:
-            - if request.raw_id is set, returns the matching result by raw_id,
+            - if request.id is set, returns the matching result by id,
               or raises LLMClassificationError if it is missing from the LLM output;
-            - if request.raw_id is empty, logs a warning and returns the first
+            - if request.id is empty, logs a warning and returns the first
               available classification result.
             """
 
         results = self.classify_batch([request], catalog)
-        raw_id = (request.raw_id or "").strip()
+        id = (request.id or "").strip()
 
         if not results:
             raise LLMClassificationError(
                 "LLM returned no valid items for single helpdesk request",
             )
 
-        if raw_id:
-            if raw_id in results:
-                return results[raw_id]
+        if id:
+            if id in results:
+                return results[id]
             raise LLMClassificationError(
-                f"LLM response missing entry for raw_id={raw_id!r} in single-request call",
+                f"LLM response missing entry for id={id!r} in single-request call",
             )
 
         logger.warning(
-            "HelpdeskRequest without raw_id; using first LLM result as fallback "
+            "HelpdeskRequest without id; using first LLM result as fallback "
             "for single-request classification",
         )
         return next(iter(results.values()))
@@ -76,7 +73,7 @@ class LLMClassifier:
 
             Builds a prompt from the Service Catalog and the given requests, asks
             the model for JSON output, then validates and converts the 'items' list
-            into a dict keyed by raw_id.
+            into a dict keyed by id.
 
             Raises LLMClassificationError on API failures, invalid JSON, missing
             'items', empty results, or when all items are rejected as malformed.
@@ -100,7 +97,9 @@ class LLMClassifier:
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    temperature=0.0,
+                    temperature=self._config.temperature,
+                    top_p=self._config.top_p,
+                    top_k=self._config.top_k,
                 ),
             )
         except Exception as exc:
@@ -138,23 +137,34 @@ class LLMClassifier:
                 )
                 continue
 
-            raw_id_raw = item.get("raw_id")
-            raw_id = normalize_str_or_none(raw_id_raw)
-            if not raw_id:
+            id_raw = item.get("id")
+            id = normalize_str_or_none(id_raw)
+            if not id:
                 logger.warning(
-                    "Skipping LLM item without valid 'raw_id' at index %d: %r",
+                    "Skipping LLM item without valid 'id' at index %d: %r",
                     index,
                     item,
                 )
                 continue
 
+            # warn if model returned SLA fields (must be ignored; SLA comes from Service Catalog)
+            raw_sla_unit = item.get("sla_unit")
+            raw_sla_value = item.get("sla_value")
+            if raw_sla_unit is not None or raw_sla_value is not None:
+                logger.warning(
+                    "LLM returned SLA fields for request %s at index %d (sla_unit=%r, sla_value=%r). "
+                    "Ignoring them; SLA is derived from Service Catalog.",
+                    id,
+                    index,
+                    raw_sla_unit,
+                    raw_sla_value,
+                )
+
             result = LLMClassificationResult(
                 request_category=normalize_str_or_none(item.get("request_category")),
                 request_type=normalize_str_or_none(item.get("request_type")),
-                sla_unit=normalize_str_or_none(item.get("sla_unit")),
-                sla_value=normalize_int_or_none(item.get("sla_value")),
             )
-            results[raw_id] = result
+            results[id] = result
 
         # if all items were rejected, treat it as a format error
         if not results:
@@ -165,7 +175,7 @@ class LLMClassifier:
                 items,
             )
             raise LLMClassificationError(
-                "LLM batch JSON contained no valid items (all missing or invalid 'raw_id')",
+                "LLM batch JSON contained no valid items (all missing or invalid 'id')",
             )
 
         logger.debug("LLM batch classification produced %d items", len(results))
@@ -198,11 +208,12 @@ def _build_batch(requests: list[HelpdeskRequest]) -> str:
 
     parts: list[str] = []
     for req in requests:
-        raw_payload_str = json.dumps(req.raw_payload or {}, ensure_ascii=False)
         parts.append(
-            f"ID: {req.raw_id or ''}\n"
+            f"ID: {req.id or ''}\n"
             f"Short description: {req.short_description or ''}\n"
-            f"Raw payload JSON: {raw_payload_str}"
+            f"Long description: {req.long_description or ''}\n"
+            f"Current request_category: {req.request_category or ''}\n"
+            f"Current request_type: {req.request_type or ''}\n"
         )
     return "\n\n---\n\n".join(parts)
 

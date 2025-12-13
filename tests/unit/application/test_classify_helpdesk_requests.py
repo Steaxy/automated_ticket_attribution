@@ -1,26 +1,25 @@
 from __future__ import annotations
-from typing import Mapping, Dict, List
+from typing import Mapping
 from app.application.classify_helpdesk_requests import classify_requests
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
 from app.domain.helpdesk import HelpdeskRequest
-from app.domain.service_catalog import ServiceCatalog
+from app.domain.service_catalog import ServiceCatalog, ServiceCategory, ServiceRequestType, SLA
 from collections.abc import Sequence
 
 
 # construct a valid HelpdeskRequest
-def _make_request(raw_id: str) -> HelpdeskRequest:
+def _make_request(id: str) -> HelpdeskRequest:
     return HelpdeskRequest(
-        raw_id=raw_id,
-        short_description=f"test {raw_id}",
-        raw_payload={},
+        id=id,
+        short_description=f"test {id}",
     )
 
 class FakeClassifier:
-    def __init__(self, results_by_id: Dict[str, LLMClassificationResult], fail_on_call: int | None = None) -> None:
+    def __init__(self, results_by_id: dict[str, LLMClassificationResult], fail_on_call: int | None = None) -> None:
         self._results_by_id = results_by_id
         self._fail_on_call = fail_on_call
         self.calls: int = 0
-        self.batches: List[Sequence[HelpdeskRequest]] = []
+        self.batches: list[Sequence[HelpdeskRequest]] = []
 
     def classify_batch(
         self,
@@ -34,9 +33,9 @@ class FakeClassifier:
             raise LLMClassificationError("boom")
 
         return {
-            r.raw_id: self._results_by_id[r.raw_id]
+            r.id: self._results_by_id[r.id]
             for r in requests
-            if r.raw_id in self._results_by_id
+            if r.id in self._results_by_id
         }
 
 # all requests classified, no errors
@@ -45,20 +44,37 @@ def test_classify_requests_with_llm_happy_path() -> None:
     req2 = _make_request("r2")
     requests = [req1, req2]
 
-    service_catalog = ServiceCatalog(categories=[])
+    service_catalog = ServiceCatalog(
+        categories=[
+            ServiceCategory(
+                name="Access",
+                requests=[
+                    ServiceRequestType(
+                        name="Password reset",
+                        sla=SLA(unit="hours", value=4),
+                    ),
+                ],
+            ),
+            ServiceCategory(
+                name="Hardware",
+                requests=[
+                    ServiceRequestType(
+                        name="Laptop issue",
+                        sla=SLA(unit="hours", value=24),
+                    ),
+                ],
+            ),
+        ]
+    )
 
     results = {
         "r1": LLMClassificationResult(
             request_category="Access",
             request_type="Password reset",
-            sla_unit="hours",
-            sla_value=4,
         ),
         "r2": LLMClassificationResult(
             request_category="Hardware",
             request_type="Laptop issue",
-            sla_unit="days",
-            sla_value=1,
         ),
     }
 
@@ -73,18 +89,18 @@ def test_classify_requests_with_llm_happy_path() -> None:
     )
 
     # same number of items and same order
-    assert [r.raw_id for r in classified] == ["r1", "r2"]
+    assert [r.id for r in classified] == ["r1", "r2"]
 
     # fields updated from LLM result
     assert req1.request_category == "Access"
     assert req1.request_type == "Password reset"
-    assert req1.sla_unit == "hours"
-    assert req1.sla_value == 4
+    assert req1.sla_unit is None
+    assert req1.sla_value is None
 
     assert req2.request_category == "Hardware"
     assert req2.request_type == "Laptop issue"
-    assert req2.sla_unit == "days"
-    assert req2.sla_value == 1
+    assert req2.sla_unit is None
+    assert req2.sla_value is None
 
     # classifier was called once
     assert classifier.calls == 1
@@ -97,21 +113,38 @@ def test_classify_requests_with_llm_batch_failure() -> None:
     req3 = _make_request("r3")
     requests = [req1, req2, req3]
 
-    service_catalog = ServiceCatalog(categories=[])
+    service_catalog = ServiceCatalog(
+        categories=[
+            ServiceCategory(
+                name="Cat1",
+                requests=[
+                    ServiceRequestType(
+                        name="Type1",
+                        sla=SLA(unit="hours", value=1),
+                    ),
+                ],
+            ),
+            ServiceCategory(
+                name="Cat3",
+                requests=[
+                    ServiceRequestType(
+                        name="Type3",
+                        sla=SLA(unit="hours", value=3),
+                    ),
+                ],
+            ),
+        ]
+    )
 
     results = {
         "r1": LLMClassificationResult(
             request_category="Cat1",
             request_type="Type1",
-            sla_unit="hours",
-            sla_value=2,
         ),
         # r2 intentionally missing
         "r3": LLMClassificationResult(
             request_category="Cat3",
             request_type="Type3",
-            sla_unit="days",
-            sla_value=1,
         ),
     }
 
@@ -127,7 +160,7 @@ def test_classify_requests_with_llm_batch_failure() -> None:
     )
 
     # all requests are still returned
-    assert [r.raw_id for r in classified] == ["r1", "r2", "r3"]
+    assert [r.id for r in classified] == ["r1", "r2", "r3"]
 
     # first batch processed OK
     assert req1.request_category == "Cat1"
@@ -136,3 +169,31 @@ def test_classify_requests_with_llm_batch_failure() -> None:
 
     # second batch failed completely -> no classification for r3
     assert req3.request_category is None
+
+def test_classify_requests_applies_canonical_strings_case_insensitive() -> None:
+    req1 = _make_request("r1")
+
+    service_catalog = ServiceCatalog(
+        categories=[
+            ServiceCategory(
+                name="Access",
+                requests=[ServiceRequestType(name="Password reset", sla=SLA(unit="hours", value=4))],
+            ),
+        ]
+    )
+
+    classifier = FakeClassifier(
+        results_by_id={
+            "r1": LLMClassificationResult(request_category="access", request_type="PASSWORD   RESET"),
+        }
+    )
+
+    classify_requests(
+        classifier=classifier,
+        service_catalog=service_catalog,
+        requests_=[req1],
+        batch_size=10,
+    )
+
+    assert req1.request_category == "Access"
+    assert req1.request_type == "Password reset"

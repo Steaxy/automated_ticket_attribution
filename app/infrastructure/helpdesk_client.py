@@ -1,22 +1,24 @@
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List
+from typing import Any
 import requests
 from requests import HTTPError, RequestException
 from app.config import HelpdeskAPIConfig
 from app.domain.helpdesk import HelpdeskRequest
 import time
+from app.application.dto.fetched_helpdesk_request import FetchedHelpdeskRequest
 
 
 logger = logging.getLogger(__name__)
 
 class HelpdeskAPIError(RuntimeError):
-    """Raised when the Service Catalog cannot be retrieved, parsed, or validated."""
+    """Raised when Helpdesk API cannot be called or its response cannot be parsed/validated."""
 
 class HelpdeskClient:
-    """HTTP client for fetching raw helpdesk requests from the Helpdesk API.
-        Uses the configured URL and credentials to POST a JSON payload and then
-        maps the response into HelpdeskRequest domain objects.
+    """HTTP client for fetching helpdesk requests from the Helpdesk API.
+        Calls the configured endpoint with credentials, parses the JSON response,
+        extracts request items, and returns them as `FetchedHelpdeskRequest`
+        (domain request + raw payload envelope).
         """
 
     def __init__(
@@ -32,8 +34,9 @@ class HelpdeskClient:
 
     def _post_json(self) -> Any:
         """Call the Helpdesk API and return the parsed JSON body.
-            Raises HelpdeskAPIError if the HTTP request fails or if the response
-            body is not valid JSON.
+            Retries on HTTP/network failures with exponential backoff.
+            Raises:
+                HelpdeskAPIError: on request failures after retries or invalid JSON.
             """
 
         payload = {
@@ -90,14 +93,11 @@ class HelpdeskClient:
             raise HelpdeskAPIError(msg) from exc
 
     def fetch_raw(self) -> Any:
+        """Fetch the raw JSON response from the Helpdesk API."""
         return self._post_json()
 
-    def fetch_requests(self) -> List[HelpdeskRequest]:
-        """Fetch helpdesk requests and map them into HelpdeskRequest objects.
-            Handles several common response shapes, logs basic response metadata,
-            and skips any non-dict items in the payload. Raises HelpdeskAPIError
-            if the response shape is unexpected.
-            """
+    def fetch_requests(self) -> list[FetchedHelpdeskRequest]:
+        """Fetch helpdesk requests and map them into domain + raw envelope."""
 
         data = self._post_json()
         logger.info(
@@ -107,38 +107,53 @@ class HelpdeskClient:
 
         items = self._extract_items(data)
 
-        requests_list: List[HelpdeskRequest] = []
+        result: list[FetchedHelpdeskRequest] = []
         for item in items:
-            if not isinstance(item, dict):
-                logger.warning("Skipping non-object item in response: %r", item)
-                continue
+            id = _normalize_optional_str(item.get("id") or item.get("ticket_id"))
+            short_description = _normalize_optional_str(item.get("short_description") or item.get("subject"))
 
-            raw_id = _safe_str(item.get("id") or item.get("ticket_id"))
-            short_description = _safe_str(
-                item.get("short_description") or item.get("subject")
+            long_description = _normalize_optional_str(
+                item.get("long_description") or item.get("description") or item.get("body")
             )
 
-            requests_list.append(
-                HelpdeskRequest(
-                    raw_id=raw_id,
-                    short_description=short_description,
+            request_category = _normalize_optional_str(item.get("request_category"))
+            request_type = _normalize_optional_str(item.get("request_type"))
+
+            sla_payload = item.get("sla")
+            sla_unit: str | None = None
+            sla_value: int | None = None
+            if isinstance(sla_payload, dict):
+                sla_unit = _normalize_optional_str(sla_payload.get("unit"))
+                sla_value = _normalize_optional_int(sla_payload.get("value"))
+
+            domain_req = HelpdeskRequest(
+                id=id,
+                short_description=short_description,
+                long_description=long_description,
+                request_category=request_category,
+                request_type=request_type,
+                sla_unit=sla_unit,
+                sla_value=sla_value,
+            )
+
+            result.append(
+                FetchedHelpdeskRequest(
+                    request=domain_req,
                     raw_payload=item,
                 )
             )
 
-        logger.info("Fetched %d helpdesk requests", len(requests_list))
-        return requests_list
+        logger.info("Fetched %d helpdesk requests", len(result))
+        return result
 
-    def _extract_items(self, data: Any) -> List[Dict[str, Any]]:
-        """Extract a list of item dicts from the raw Helpdesk API JSON.
-
-            Supports responses where the items are:
-            - a top-level list of dicts, or
-            - under data (list), or
-            - under data.requests (list).
-
-            Raises HelpdeskAPIError if the response does not match any of the
-            expected shapes.
+    def _extract_items(self, data: Any) -> list[dict[str, Any]]:
+        """Extract a list of request dicts from the Helpdesk API JSON.
+            Supported shapes:
+            - top-level list of dicts
+            - top-level dict with `data` as list of dicts
+            - top-level dict with `data.requests` as list of dicts
+            Raises:
+                HelpdeskAPIError: if no supported shape matches.
             """
 
         if isinstance(data, list):
@@ -151,9 +166,9 @@ class HelpdeskClient:
                 return [item for item in payload if isinstance(item, dict)]
 
             if isinstance(payload, dict):
-                requests = payload.get("requests")
-                if isinstance(requests, list):
-                    return [item for item in requests if isinstance(item, dict)]
+                items_payload = payload.get("requests")
+                if isinstance(items_payload, list):
+                    return [item for item in items_payload if isinstance(item, dict)]
 
                 logger.error(
                     "Helpdesk API 'data' dict has no 'requests' list. data keys=%s, payload keys=%s",
@@ -177,9 +192,24 @@ class HelpdeskClient:
         logger.error(msg)
         raise HelpdeskAPIError(msg)
 
-def _safe_str(value: Any) -> str | None:
-    """Return value as string, or None if the value itself is None."""
-
+def _normalize_optional_str(value: Any) -> str | None:
+    """Return stripped string or None for empty/whitespace."""
     if value is None:
         return None
-    return str(value)
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_optional_int(value: Any) -> int | None:
+    """Return int or None for missing/invalid/zero."""
+    if value is None:
+        return None
+    try:
+        # accept "3.0" and 3.0
+        if isinstance(value, float):
+            number = int(value)
+        else:
+            number = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return None if number == 0 else number

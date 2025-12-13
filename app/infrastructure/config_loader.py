@@ -52,11 +52,32 @@ def load_llm_config() -> LLMConfig:
     except ValueError as exc:
         raise RuntimeError("LLM_BATCH_SIZE must be an integer") from exc
 
+    temperature_str = os.getenv("LLM_TEMPERATURE", "0.0")
+    top_p_str = os.getenv("LLM_TOP_P", "1.0")
+    top_k_str = os.getenv("LLM_TOP_K", "1")
+
+    try:
+        temperature = float(temperature_str)
+        top_p = float(top_p_str)
+        top_k = int(top_k_str)
+    except ValueError as exc:
+        raise RuntimeError("LLM_TEMPERATURE/LLM_TOP_P must be float; LLM_TOP_K must be int") from exc
+
+    if temperature < 0.0:
+        raise RuntimeError("LLM_TEMPERATURE must be >= 0.0")
+    if not (0.0 < top_p <= 1.0):
+        raise RuntimeError("LLM_TOP_P must be in (0.0, 1.0]")
+    if top_k < 1:
+        raise RuntimeError("LLM_TOP_K must be >= 1")
+
     return LLMConfig(
         model_name=model_name,
         api_key=api_key,
         batch_size=batch_size,
         delay_between_batches=delay_between_batches,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
     )
 
 def load_email_config() -> EmailConfig:

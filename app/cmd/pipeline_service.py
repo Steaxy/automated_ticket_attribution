@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from app.application.missing_helpdesk_sla import missing_sla
+from app.application.fill_helpdesk_sla import fill_helpdesk_sla
 from app.application.classify_helpdesk_requests import classify_requests
 from app.cmd.spinner import Spinner
 from pathlib import Path
@@ -92,7 +92,7 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
         )
 
     # [part 5] build Excel file
-    missing_sla(classified_requests, service_catalog)
+    fill_helpdesk_sla(classified_requests, service_catalog)
     try:
         report_path = deps.report_exporter.export(classified_requests)
     except ReportGenerationError as exc:

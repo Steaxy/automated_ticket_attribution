@@ -9,8 +9,6 @@ from app.domain.service_catalog import ServiceCatalog
 class LLMClassificationResult:
     request_category: Optional[str]
     request_type: Optional[str]
-    sla_unit: Optional[str]
-    sla_value: Optional[int]
 
 class LLMClassificationError(RuntimeError):
     """Raised when LLM classification fails in a non-recoverable way."""

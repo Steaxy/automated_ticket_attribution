@@ -23,6 +23,9 @@ class LLMConfig:
     api_key: str
     batch_size: int
     delay_between_batches: float = 2.0
+    temperature: float = 0.0
+    top_p: float = 1.0
+    top_k: int = 1
 
 # email
 @dataclass

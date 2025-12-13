@@ -26,18 +26,6 @@ class FakeServiceCatalogClient:
         self.called = True
         return ServiceCatalog(categories=[])
 
-class FakeLLMClassifier:
-    def __init__(self) -> None:
-        self.batches: list[list[Any]] = []
-
-    def classify_batch(
-        self,
-        requests: Sequence[HelpdeskRequest],
-        service_catalog: ServiceCatalog,
-    ) -> Mapping[str, LLMClassificationResult]:
-        self.batches.append(list(requests))
-        return {}
-
 class FakeReportLog:
     def __init__(self) -> None:
         self.marked: list[Path] = []
@@ -71,11 +59,18 @@ class FakeEmailSender:
     def send_report_email(self, subject: str, body: str, attachments: list[Path], html_body: str | None = None) -> None:
         self.calls.append((subject, body, attachments, html_body))
 
-def _make_req(raw_id: str) -> HelpdeskRequest:
+class FakeLLMClassifier:
+    def classify_batch(
+        self,
+        requests: Sequence[HelpdeskRequest],
+        service_catalog: ServiceCatalog,
+    ) -> Mapping[str, LLMClassificationResult]:
+        return {}
+
+def _make_req(id: str) -> HelpdeskRequest:
     return HelpdeskRequest(
-        raw_id=raw_id,
-        short_description=raw_id,
-        raw_payload={},
+        id=id,
+        short_description=id,
     )
 
 # no unsent reports, classification and send happen
@@ -93,7 +88,7 @@ def test_run_pipeline_happy_path(monkeypatch, tmp_path) -> None:
         project_root=tmp_path,
         helpdesk_service=fake_helpdesk,
         service_catalog_client=fake_catalog_client,
-        llm_classifier=fake_llm,
+        llm_classifier = fake_llm,
         report_log=fake_log,
         batch_size=10,
         email_body_builder=FakeEmailBodyBuilder(),
@@ -114,23 +109,23 @@ def test_run_pipeline_happy_path(monkeypatch, tmp_path) -> None:
         # echo requests back
         assert llm is fake_llm
         assert service_catalog == "fake_catalog"
-        assert [r.raw_id for r in requests_] == ["req1", "req2"]
+        assert [r.id for r in requests_] == ["req1", "req2"]
         assert batch_size == 10
-        return ["classified1", "classified2"]
+        return list(requests_)
 
-    def fake_missing_sla(requests_, service_catalog):
+    def fake_fill_helpdesk_sla(requests_, service_catalog):
         # no-op, ensure it is called with classified requests
-        assert requests_ == ["classified1", "classified2"]
+        assert [r.id for r in requests_] == ["req1", "req2"]
         assert service_catalog == "fake_catalog"
 
     def fake_log_sample_requests(requests_, limit: int = 5) -> None:
-        assert [r.raw_id for r in requests_] == ["req1", "req2"]
+        assert [r.id for r in requests_] == ["req1", "req2"]
 
     # patch module-level functions used by run_pipeline
     monkeypatch.setattr(ps, "_collect_unsent_reports", fake_collect_unsent_reports)
     monkeypatch.setattr(ps, "_load_service_catalog", fake_load_service_catalog)
     monkeypatch.setattr(ps, "classify_requests", fake_classify_requests)
-    monkeypatch.setattr(ps, "missing_sla", fake_missing_sla)
+    monkeypatch.setattr(ps, "fill_helpdesk_sla", fake_fill_helpdesk_sla)
     monkeypatch.setattr(ps, "_log_sample_requests", fake_log_sample_requests)
 
     # act
@@ -146,16 +141,16 @@ def test_run_pipeline_happy_path(monkeypatch, tmp_path) -> None:
 
     # _send_report resolves paths -> should be resolved
     assert attachments == [report_path.resolve()]
+    assert fake_log.marked == [report_path.resolve()]
 
     # report was marked as sent
-    assert fake_log.marked == [report_path.resolve()]
-    assert fake_exporter.called_with == [["classified1", "classified2"]]
+    assert len(fake_exporter.called_with) == 1
+    assert [r.id for r in fake_exporter.called_with[0]] == ["req1", "req2"]
 
 
 def test_run_pipeline_sends_unsent_reports(monkeypatch, tmp_path) -> None:
     fake_helpdesk = FakeHelpdeskService(requests_=[_make_req("req1"), _make_req("req2")])
-    fake_catalog_client = FakeServiceCatalogClient()
-    fake_llm = FakeLLMClassifier()
+    service_catalog_client = FakeServiceCatalogClient()
     fake_log = FakeReportLog()
     report_path = tmp_path / "report.xlsx"
     fake_exporter = FakeReportExporter(report_path=report_path)
@@ -164,8 +159,8 @@ def test_run_pipeline_sends_unsent_reports(monkeypatch, tmp_path) -> None:
     deps = PipelineDeps(
         project_root=tmp_path,
         helpdesk_service=fake_helpdesk,
-        service_catalog_client=fake_catalog_client,
-        llm_classifier=fake_llm,
+        service_catalog_client=service_catalog_client,
+        llm_classifier = FakeLLMClassifier(),
         report_log=fake_log,
         batch_size=10,
         email_body_builder=FakeEmailBodyBuilder(),

@@ -50,7 +50,7 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
 
     # define and write header
     headers = [
-        "raw_id",
+        "id",
         "request_category",
         "request_type",
         "short_description",
@@ -63,7 +63,7 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
     for req in sorted_requests:
         ws.append(
             [
-                req.raw_id or "",
+                req.id or "",
                 req.request_category or "",
                 req.request_type or "",
                 req.short_description or "",

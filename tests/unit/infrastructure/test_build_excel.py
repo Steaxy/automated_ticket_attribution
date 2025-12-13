@@ -7,7 +7,7 @@ from app.infrastructure.build_excel import build_excel
 
 # build a HelpdeskRequest
 def _make_request(
-    raw_id: str = "1",
+    id: str = "1",
     request_category: str = "Category A",
     request_type: str = "Type X",
     short_description: str = "Some short description",
@@ -15,21 +15,20 @@ def _make_request(
     sla_unit: str | None = "days",
 ) -> HelpdeskRequest:
     return HelpdeskRequest(
-        raw_id=raw_id,
+        id=id,
         request_category=request_category,
         request_type=request_type,
         short_description=short_description,
         sla_value=sla_value,
         sla_unit=sla_unit,
-        raw_payload={},                                                                                                     # type: ignore[arg-type]
     )
 
 def test_build_excel() -> None:
     # given
     # no LLM or classifier involved
     requests = [
-        _make_request(raw_id="1", short_description="first"),
-        _make_request(raw_id="2", short_description="second"),
+        _make_request(id="1", short_description="first"),
+        _make_request(id="2", short_description="second"),
     ]
 
     # when
@@ -43,7 +42,7 @@ def test_build_excel() -> None:
 
     # header checks
     header_cell = ws["A1"]
-    assert header_cell.value == "raw_id"
+    assert header_cell.value == "id"
     assert header_cell.font.bold is True
     assert header_cell.font.size == 14
 
@@ -78,25 +77,25 @@ def test_build_excel_sorts() -> None:
     # intentionally unsorted input
     requests = [
         _make_request(
-            raw_id="1",
+            id="1",
             request_category="Category B",
             request_type="Type Z",
             short_description="zzz",
         ),
         _make_request(
-            raw_id="2",
+            id="2",
             request_category="Category A",
             request_type="Type Y",
             short_description="beta",
         ),
         _make_request(
-            raw_id="3",
+            id="3",
             request_category="Category A",
             request_type="Type X",
             short_description="alpha",
         ),
         _make_request(
-            raw_id="4",
+            id="4",
             request_category="Category A",
             request_type="Type X",
             short_description="aaa",
@@ -111,7 +110,7 @@ def test_build_excel_sorts() -> None:
     ws = wb.active
 
     # rows start from 2 because row 1 is header
-    raw_ids_order = [ws[f"A{row}"].value for row in range(2, 2 + len(requests))]
+    ids_order = [ws[f"A{row}"].value for row in range(2, 2 + len(requests))]
 
     # expected order by:
     #   request_category ASC
@@ -121,7 +120,7 @@ def test_build_excel_sorts() -> None:
     #   Category A / Type X / "alpha" (3)
     #   Category A / Type Y / "beta" (2)
     #   Category B / Type Z / "zzz" (1)
-    assert raw_ids_order == ["4", "3", "2", "1"]
+    assert ids_order == ["4", "3", "2", "1"]
 
 
 # verify columns are auto-fitted based on content length
@@ -130,11 +129,11 @@ def test_build_excel_auto_fits_columns() -> None:
     # second row has much longer short_description
     requests = [
         _make_request(
-            raw_id="1",
+            id="1",
             short_description="short",
         ),
         _make_request(
-            raw_id="2",
+            id="2",
             short_description="this is a much longer short description for testing",
         ),
     ]
@@ -146,12 +145,12 @@ def test_build_excel_auto_fits_columns() -> None:
     wb = load_workbook(BytesIO(excel_bytes))
     ws = wb.active
 
-    # column A: raw_id, small content
-    width_raw_id = ws.column_dimensions["A"].width
+    # column A: id, small content
+    width_id = ws.column_dimensions["A"].width
     # column D: short_description, larger content
     width_short_desc = ws.column_dimensions["D"].width
 
     # widths should be numbers and short_description column should be wider
-    assert isinstance(width_raw_id, (int, float))
+    assert isinstance(width_id, (int, float))
     assert isinstance(width_short_desc, (int, float))
-    assert width_short_desc > width_raw_id
+    assert width_short_desc > width_id

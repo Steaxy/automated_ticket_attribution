@@ -1,17 +1,24 @@
-from unittest.mock import Mock
 from app.application.helpdesk_services import HelpdeskService
 from app.domain.helpdesk import HelpdeskRequest
-from app.infrastructure.helpdesk_client import HelpdeskClient
+from app.application.ports.helpdesk_service_port import HelpdeskRequestProvider
 
+
+class FakeHelpdeskRequestProvider(HelpdeskRequestProvider):
+    def __init__(self, result: list[HelpdeskRequest]) -> None:
+        self._result = result
+        self.called = 0
+
+    def fetch_requests(self) -> list[HelpdeskRequest]:
+        self.called += 1
+        return self._result
 
 def test_helpdesk_service_delegates_to_client() -> None:
-    mock_client = Mock(spec=HelpdeskClient)
-    expected = [HelpdeskRequest(raw_id="x", short_description="y", raw_payload={})]
-    mock_client.fetch_requests.return_value = expected
+    expected = [HelpdeskRequest(id="x", short_description="y")]
+    provider = FakeHelpdeskRequestProvider(expected)
 
-    service = HelpdeskService(mock_client)
+    service = HelpdeskService(provider)
 
     result = service.load_helpdesk_requests()
 
     assert result == expected
-    mock_client.fetch_requests.assert_called_once()
+    assert provider.called == 1

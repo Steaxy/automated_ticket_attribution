@@ -6,6 +6,7 @@ from app.domain.service_catalog import ServiceCatalog
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
 from app.application.classify_helpdesk_requests_progress import _batches_progress
 from collections.abc import Sequence
+from app.application.service_catalog_matcher import ServiceCatalogMatcher
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ def classify_requests(
     if not requests_:
         logger.info("[part 3 and 4] No helpdesk requests provided; skipping LLM step")
         return []
+
+    matcher = ServiceCatalogMatcher(service_catalog)
 
     classified_requests: list[HelpdeskRequest] = []
     logged_examples = 0
@@ -56,30 +59,60 @@ def classify_requests(
             batch_end_index,
         )
 
+        set_category_count = 0
+        set_type_count = 0
+        missing_result_count = 0
+        rejected_pair_count = 0
+
         for req in batch:
-            raw_id = req.raw_id or ""
-            result = batch_results.get(raw_id)
+            id = req.id or ""
+            result = batch_results.get(id)
 
             if result is None:
+                missing_result_count += 1
                 classified_requests.append(req)
                 continue
 
-            req.request_category = result.request_category
-            req.request_type = result.request_type
-            req.sla_unit = result.sla_unit
-            req.sla_value = result.sla_value
+            # resolve to canonical catalog strings using both current + LLM suggestion
+            candidate_category = req.request_category or result.request_category
+            candidate_type = req.request_type or result.request_type
+            resolved = matcher.resolve(candidate_category, candidate_type)
+
+            if resolved is None:
+                # do not write non-catalog values (avoid breaking SLA lookup later)
+                rejected_pair_count += 1
+            else:
+                # write back canonical catalog casing/spaces
+                if not req.request_category:
+                    req.request_category = resolved.request_category
+                    set_category_count += 1
+
+                if not req.request_type:
+                    req.request_type = resolved.request_type
+                    set_type_count += 1
 
             if logged_examples < examples_to_log:
                 logger.info(
-                    "[part 3 and 4] LLM result for %s: category=%r type=%r sla=%r %r",
-                    req.raw_id,
+                    # log both raw and resolved for check canonicalization
+                    "[part 3 and 4] LLM result for %s: raw_category=%r raw_type=%r resolved=%r",
+                    req.id,
                     result.request_category,
                     result.request_type,
-                    result.sla_value,
-                    result.sla_unit,
+                    None if resolved is None else (resolved.request_category, resolved.request_type),
                 )
                 logged_examples += 1
 
             classified_requests.append(req)
+
+        # log summary if SLA was set from service catalog
+        logger.info(
+            "[part 3] Applied LLM classification: categories_set=%d types_set=%d missing_results=%d rejected_pairs=%d (batch %d..%d)",
+            set_category_count,
+            set_type_count,
+            missing_result_count,
+            rejected_pair_count,
+            batch_start,
+            batch_end_index,
+        )
 
     return classified_requests

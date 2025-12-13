@@ -17,6 +17,7 @@ from app.infrastructure.email_templates.email_body_builder import TemplateEmailB
 from app.infrastructure.report_exporter_excel import ExcelReportExporter
 from app.infrastructure.config_loader import load_email_config
 from app.infrastructure.email_sender import SMTPSender
+from app.infrastructure.helpdesk_client_request_provider import HelpdeskClientRequestProvider
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,8 @@ def _build_pipeline_deps() -> PipelineDeps:
     # helpdesk
     helpdesk_config = load_helpdesk_config()
     helpdesk_client = HelpdeskClient(helpdesk_config)
-    helpdesk_service = HelpdeskService(helpdesk_client)
+    helpdesk_provider = HelpdeskClientRequestProvider(helpdesk_client)
+    helpdesk_service = HelpdeskService(helpdesk_provider)
 
     # service catalog
     service_catalog_config = load_service_catalog_config()

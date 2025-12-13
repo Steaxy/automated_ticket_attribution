@@ -1,22 +1,31 @@
 from __future__ import annotations
 import json
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 import pytest
-from app.infrastructure.llm_classifier import LLMClassifier, LLMClassificationResult
-from app.application.llm_classifier import LLMClassificationError
+from app.infrastructure.llm_classifier import LLMClassifier
+from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
 
 
 @dataclass
 class DummyLLMConfig:
     api_key: str = "dummy-key"
     model_name: str = "dummy-model"
+    batch_size: int = 30
+    delay_between_batches: float = 0.0
+    temperature: float = 0.0
+    top_p: float = 1.0
+    top_k: int = 1
 
 @dataclass
 class DummyHelpdeskRequest:
-    raw_id: str
+    id: str
     short_description: str = ""
-    raw_payload: Dict[str, Any] | None = None
+    long_description: str = ""
+    request_category: str = ""
+    request_type: str = ""
+    sla_unit: str = ""
+    sla_value: int = 0
 
 @dataclass
 class DummySLA:
@@ -55,20 +64,22 @@ class DummyClient:
         self.models = DummyModels(response)
 
 
-# classify_batch parses JSON and returns mapping raw_id -> result
-def test_classify_batch_happy_path() -> None:
+# classify_batch parses JSON and returns mapping id -> result
+def test_classify_batch_happy_path(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("WARNING")
+
     # fake LLM JSON output
     payload = {
         "items": [
             {
-                "raw_id": "req_101",
+                "id": "req_101",
                 "request_category": "Access Management",
                 "request_type": "Reset forgotten password",
                 "sla_unit": "hours",
                 "sla_value": 4,
             },
             {
-                "raw_id": "req_102",
+                "id": "req_102",
                 "request_category": "Hardware Support",
                 "request_type": "Laptop Repair/Replacement",
                 "sla_unit": "days",
@@ -98,8 +109,8 @@ def test_classify_batch_happy_path() -> None:
     )
 
     requests = [
-        DummyHelpdeskRequest(raw_id="req_101", short_description="Forgot my Okta password"),
-        DummyHelpdeskRequest(raw_id="req_102", short_description="Laptop does not start"),
+        DummyHelpdeskRequest(id="req_101", short_description="Forgot my Okta password"),
+        DummyHelpdeskRequest(id="req_102", short_description="Laptop does not start"),
     ]
 
     results = classifier.classify_batch(requests, catalog)                                                                  # type: ignore[arg-type]
@@ -110,19 +121,28 @@ def test_classify_batch_happy_path() -> None:
     assert isinstance(r1, LLMClassificationResult)
     assert r1.request_category == "Access Management"
     assert r1.request_type == "Reset forgotten password"
-    assert r1.sla_unit == "hours"
-    assert r1.sla_value == 4
+    assert not hasattr(r1, "sla_unit")
+    assert not hasattr(r1, "sla_value")
 
     r2 = results["req_102"]
     assert r2.request_category == "Hardware Support"
     assert r2.request_type == "Laptop Repair/Replacement"
-    assert r2.sla_unit == "days"
-    assert r2.sla_value == 7
+    assert not hasattr(r1, "sla_unit")
+    assert not hasattr(r1, "sla_value")
+
+    # verify that detected SLA fields returned by LLM
+    assert "LLM returned SLA fields for request req_101" in caplog.text
+    assert "LLM returned SLA fields for request req_102" in caplog.text
 
     # check that the classifier used the configured model name
     models = classifier._client.models                                                                                      # type: ignore[attr-defined]
     assert models.last_kwargs is not None
     assert models.last_kwargs["model"] == cfg.model_name
+
+    gen_cfg = models.last_kwargs["config"]
+    assert gen_cfg.temperature == cfg.temperature
+    assert gen_cfg.top_p == cfg.top_p
+    assert gen_cfg.top_k == cfg.top_k
 
 
 # empty input returns empty mapping and must not call generate_content
@@ -146,7 +166,7 @@ def test_classify_batch_invalid_json_raises() -> None:
     classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
     catalog = DummyCatalog(categories=[])
-    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+    requests = [DummyHelpdeskRequest(id="req_1")]
 
     with pytest.raises(LLMClassificationError):
         classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]
@@ -160,7 +180,7 @@ def test_classify_batch_missing_items_raises() -> None:
     classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
     catalog = DummyCatalog(categories=[])
-    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+    requests = [DummyHelpdeskRequest(id="req_1")]
 
     with pytest.raises(LLMClassificationError):
         classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]
@@ -173,24 +193,24 @@ def test_classify_batch_empty_items_list_raises() -> None:
     classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
     catalog = DummyCatalog(categories=[])
-    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+    requests = [DummyHelpdeskRequest(id="req_1")]
 
     with pytest.raises(LLMClassificationError):
         classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]
 
-def test_classify_batch_all_items_missing_raw_id_raises() -> None:
+def test_classify_batch_all_items_missing_id_raises() -> None:
     payload = {
         "items": [
             {
-                # raw_id is missing entirely
+                # id is missing entirely
                 "request_category": "Access Management",
                 "request_type": "Reset forgotten password",
                 "sla_unit": "hours",
                 "sla_value": 4,
             },
             {
-                # raw_id is empty / invalid
-                "raw_id": "  ",
+                # id is empty / invalid
+                "id": "  ",
                 "request_category": "Hardware Support",
                 "request_type": "Laptop Repair/Replacement",
                 "sla_unit": "days",
@@ -204,7 +224,7 @@ def test_classify_batch_all_items_missing_raw_id_raises() -> None:
     classifier._client = DummyClient(response)                                                                              # type: ignore[attr-defined]
 
     catalog = DummyCatalog(categories=[])
-    requests = [DummyHelpdeskRequest(raw_id="req_1")]
+    requests = [DummyHelpdeskRequest(id="req_1")]
 
     with pytest.raises(LLMClassificationError):
         classifier.classify_batch(requests, catalog)                                                                        # type: ignore[arg-type]

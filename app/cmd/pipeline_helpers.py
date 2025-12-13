@@ -37,7 +37,7 @@ def _log_sample_requests(requests_: Sequence[HelpdeskRequest], limit: int = 5) -
     for req in requests_[:limit]:
         logger.info(
             "[part 1] Request ID=%s short_description=%r",
-            req.raw_id,
+            req.id,
             req.short_description,
         )
 
