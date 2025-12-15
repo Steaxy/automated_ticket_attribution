@@ -5,19 +5,36 @@ automatic classification of IT helpdesk tickets based on an IT Service Catalog.
 
 ## Features / Pipeline overview
 
-- Fetch helpdesk requests from the webhook endpoint using API key + secret.
-- Fetch the Service Catalog (YAML) from a remote URL.
-- Batch requests to the LLM (configurable batch size, default 30).
-- Let the LLM fill `request_category`, `request_type`, `sla_unit`, `sla_value` based on the Service Catalog.
-- Generate a sorted Excel report with basic formatting.
-- Send the report via SMTP to the configured recipient, including a link to the codebase.
-- Track sent reports in a SQLite database and resend any unsent reports from the `output/` directory
-  before calling the Helpdesk API or the LLM.
+### Task
+1. Fetch helpdesk requests from the webhook endpoint using API key + secret.
+2. Fetch the Service Catalog (YAML) from a remote URL.
+3. Batch requests to the LLM (configurable batch size, default 30).
+4. Let the LLM fill `request_category`, `request_type`, `sla_unit`, `sla_value` based on the Service Catalog.
+5. Generate a sorted Excel report with formatting.
+6. Send the report via SMTP to the configured recipient, including a link to the codebase.
+
+### Additional features
+- Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
 - Log all key steps via Python `logging` and provide a simple terminal progress indicator (spinner).
-- Covered by unit tests (pytest) and static checks (ruff, mypy).
+- Covered by unit and integration tests and static checks (ruff, mypy).
+- Helpdesk API and Service Catalog HTTP calls have retry + exponential backoff (configurable `max_retries`, `backoff_factor`).
+- Supports sending multiple attachments in one email (all pending reports in a single message).
+- Supports an explicit report path mode (send a specific report if it isn’t logged as sent yet).
+- LLM output is strictly validated (must be JSON, must contain `items`, items must be dicts and include `id`), otherwise the batch is treated as failed.
+- If an LLM batch fails, requests from that batch are still included “as-is” in the Excel report (degradation strategy instead of hard failing).
+- LLM-provided SLA fields are explicitly ignored (warned in logs). SLA is derived from the Service Catalog only.
+- Added ServiceCatalogMatcher that normalizes/canonicalizes `(request_category, request_type)` coming from the LLM:
+  - case-insensitive + whitespace-normalized matching
+  - rejects non-catalog pairs
+  - protects against normalization collisions (ambiguous matches)
+- Centralized env-based config loading (via `python-dotenv`) with required-variable checks + defaults:
+  - LLM tuning: `LLM_BATCH_SIZE`, `LLM_DELAY_BETWEEN_BATCHES`, `LLM_TEMPERATURE`, `LLM_TOP_P`, `LLM_TOP_K`
+  - report log DB path, SMTP TLS flag, etc.
+- Email body is generated from packaged templates (text + HTML), with HTML escaping for safety.
+- SMTP sender validates attachments exist, logs total attachment size, supports TLS (`starttls`) toggle.
 
 ---
-## Assumptions and open questions
+## Assumptions and open questions based on the task
 
 This project makes a few pragmatic assumptions about the Service Catalog and LLM behavior.
 For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
@@ -33,6 +50,27 @@ In short:
   description says "Camera isn't detected in Zoom". I treat this as an endpoint/device/configuration
   issue (camera/drivers/permissions) rather than a SaaS availability or access problem, so it is
   classified as `Software & Licensing / Other Software Issue` with SLA 24 hours.
+---
+## Potential future improvements
+
+- Package the pipeline into a Docker container and run it on a schedule (cron / n8n).
+- Add a Makefile workflow for deployment (e.g. `make deploy-prod`) using GitHub Actions.
+- Cache Service Catalog fetch (etag/if-modified-since) to reduce network and speed up runs.
+- Move all configuration (URLs, keys, batch sizes, email recipients, etc) into environment-based settings per environment (dev/stage/prod) (n8n).
+- Write logs to a file (log rotation), not only stdout. Logs in JSON.
+- Add an alert message with short success/failure + key metrics to, for example, a Telegram alerts channel (n8n).
+- Extend the SQLite report log table to store `sender` and `recipient` columns.
+- Store generated reports on the host (or in cloud storage), with download support (n8n).
+- Add Telegram commands (as an example for any chat platform) (n8n):
+  - run the pipeline once on demand,
+  - configure the n8n schedule,
+  - request the “sent reports” table as a file export,
+  - download a previously sent report (from host storage or cloud),
+  - request recent logs.
+- If service became always running one, add Prometheus metrics + Grafana dashboards:
+  - service health (up/down),
+  - number of reports sent per day,
+  - recipients distribution per day.
 ---
 ## Tech Stack
 
@@ -86,6 +124,9 @@ LLM_MODEL_NAME
 LLM_API_KEY
 LLM_BATCH_SIZE
 LLM_DELAY_BETWEEN_BATCHES
+LLM_TEMPERATURE
+LLM_TOP_P
+LLM_TOP_K
 EMAIL_SMTP_HOST
 EMAIL_SMTP_PORT
 EMAIL_USE_TLS

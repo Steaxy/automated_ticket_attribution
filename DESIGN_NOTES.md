@@ -25,7 +25,7 @@ Open questions I would clarify in production:
 ### Concrete assumptions for this task
 
 - Incidents that explicitly mention Jira or Salesforce (including outages like "Jira is down")
-  are mapped to:
+  should be mapped to (intended classification):
   - `request_category`: `Software & Licensing`
   - `request_type`: `SaaS Platform Access (Jira/Salesforce)`
   - `sla_unit` / `sla_value`: as defined in the catalog (`hours`, `8`).
@@ -38,7 +38,7 @@ Open questions I would clarify in production:
   Catalog, and the issue description is about the local camera rather than Zoom itself being down
   or an access-provisioning request.
 
-  Therefore, I classify it as:
+  Therefore, I expect the LLM to classify it as:
   - `request_category`: `Software & Licensing`
   - `request_type`: `Other Software Issue`
   - `sla_unit` / `sla_value`: `hours`, `24`.
@@ -86,7 +86,7 @@ For this technical task I assume:
 
 - The LLM only fills fields that are empty or zero.
 - Existing non-empty values are treated as authoritative and are not overwritten.
-- SLA values are taken from the catalog when a catalog match exists; otherwise, a best-effort SLA is chosen.
+- SLA values are taken from the catalog when a catalog match exists; otherwise, SLA remains empty/zero and a warning is logged
 
 In production, I would likely add:
 
@@ -108,6 +108,7 @@ In this implementation:
 - External calls are wrapped in project-specific exceptions (e.g. `HelpdeskAPIError`, `ServiceCatalogError`,
   `LLMClassificationError`).
 - Failures are logged with enough context (URLs, IDs, batch indices).
+- Helpdesk API and Service Catalog failures are treated as fatal (fail-fast): the run stops and no new report is generated; only LLM batch failures degrade to “as-is” rows in Excel.
 - For LLM classification:
   - If a batch fails, the error is logged.
   - The raw requests in that batch are still carried forward to the Excel report so that the pipeline
@@ -201,7 +202,7 @@ In this implementation:
 
 - The prompt enforces a strict JSON schema and instructs the model to:
   - Use category/request_type names verbatim from the Service Catalog.
-  - Always return the exact SLA from the catalog for the chosen request type (including 0).
+  - Return only request_category and request_type (verbatim from the Service Catalog); SLA is derived from the Service Catalog after classification (any SLA fields returned by the LLM are ignored).
   - Prefer specific request types over generic “Other … Issue” buckets when a clear match exists.
 
 The design assumes that:
