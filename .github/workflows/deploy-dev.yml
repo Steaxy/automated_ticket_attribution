@@ -68,7 +68,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload artifact to S3
         run: |
@@ -79,10 +79,10 @@ jobs:
       - name: Deploy on EC2 via SSM Run Command
         run: |
           TAG="${GITHUB_REF_NAME}"
-          BUCKET="${{ secrets.DEPLOY_BUCKET }}"
-          INSTANCE_ID="${{ secrets.DEV_EC2_INSTANCE_ID }}"
+          BUCKET="${{ vars.DEPLOY_BUCKET }}"
+          INSTANCE_ID="${{ vars.DEV_EC2_INSTANCE_ID }}"
           S3_URI="s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
-          AWS_REGION="${{ secrets.AWS_REGION }}"
+          AWS_REGION="${{ vars.AWS_REGION }}"
 
           aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
