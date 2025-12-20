@@ -136,6 +136,10 @@ make excel      # build example excel file
 ```text
 chmod +x deploy/ec2_deploy.sh
 ```
+### Deploy dev
+```text
+make deploy-dev
+```
 ## License
 
 Source-available, non-commercial.  

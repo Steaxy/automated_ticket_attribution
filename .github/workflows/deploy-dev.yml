@@ -73,7 +73,7 @@ jobs:
       - name: Upload artifact to S3
         run: |
           TAG="${GITHUB_REF_NAME}"
-          BUCKET="${{ secrets.DEPLOY_BUCKET }}"
+          BUCKET="${{ vars.DEPLOY_BUCKET }}"
           aws s3 cp "atta-${TAG}.tar.gz" "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
 
       - name: Deploy on EC2 via SSM Run Command
