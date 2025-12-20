@@ -44,8 +44,13 @@ jobs:
           make test
 
       - name: Package source
+        shell: bash
         run: |
+          set -euo pipefail
+
           TAG="${GITHUB_REF_NAME}"
+          OUT="/tmp/atta-${TAG}.tar.gz"
+
           tar \
             --exclude='./.git' \
             --exclude='./.venv' \
@@ -55,7 +60,9 @@ jobs:
             --exclude='./.pytest_cache' \
             --exclude='./.mypy_cache' \
             --exclude='./.ruff_cache' \
-            -czf "atta-${TAG}.tar.gz" .
+            -czf "${OUT}" .
+
+          mv "${OUT}" "atta-${TAG}.tar.gz"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
