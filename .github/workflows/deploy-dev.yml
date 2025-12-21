@@ -119,15 +119,14 @@ jobs:
               \"export AWS_REGION='${AWS_REGION}'\",
               \"export AWS_DEFAULT_REGION='${AWS_REGION}'\",
               \"export ATTA_IMAGE='${ATTA_IMAGE}'\",
-              \"echo 'ATTA_IMAGE='\\\"${ATTA_IMAGE}\\\"'\",\
+              \"echo ATTA_IMAGE=\\\"${ATTA_IMAGE}\\\"\",
 
               \"command -v docker >/dev/null 2>&1 || sudo dnf -y install docker\",
               \"sudo systemctl enable --now docker\",
 
-              \"AWS_ACCOUNT_ID=$(echo ${ATTA_IMAGE} | cut -d. -f1)\",
-              \"ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\",
+              \"ECR_REGISTRY=\\\"${ATTA_IMAGE%%/*}\\\"\",
+              \"aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${ATTA_IMAGE%%/*}\",
 
-              \"aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${ECR_REGISTRY}\",
               \"sudo docker pull ${ATTA_IMAGE}\",
               \"sudo docker images | head -20\"
             ]"
