@@ -106,32 +106,28 @@ jobs:
           set -euo pipefail
 
           TAG="${GITHUB_REF_NAME}"
-          BUCKET="${{ vars.DEPLOY_BUCKET }}"
           INSTANCE_ID="${{ vars.DEV_EC2_INSTANCE_ID }}"
           AWS_REGION="${{ vars.AWS_REGION }}"
-          S3_URI="s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
-
-          # NEW: from previous step (written into $GITHUB_ENV)
           ATTA_IMAGE="${IMAGE_URI}"
 
           aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy ATTA ${TAG} (${ATTA_IMAGE})" \
+            --comment "Pre-pull ATTA image ${TAG}" \
             --parameters commands="[
               \"set -euo pipefail\",
               \"export AWS_REGION='${AWS_REGION}'\",
               \"export AWS_DEFAULT_REGION='${AWS_REGION}'\",
-              \"export TAG='${TAG}'\",
-              \"export S3_URI='${S3_URI}'\",
-              \"export SSM_PATH='/atta/dev'\",
               \"export ATTA_IMAGE='${ATTA_IMAGE}'\",
-              \"cd /tmp\",
-              \"rm -rf /tmp/atta-deploy && mkdir -p /tmp/atta-deploy\",
-              \"aws s3 cp ${S3_URI} /tmp/atta-deploy/atta-${TAG}.tar.gz\",
-              \"tar -xzf /tmp/atta-deploy/atta-${TAG}.tar.gz -C /tmp/atta-deploy\",
-              \"bash /tmp/atta-deploy/deploy/ec2_deploy.sh\",
-              \"sudo systemctl start atta.service\",
-              \"sudo systemctl status atta.service --no-pager --full || true\",
-              \"sudo journalctl -u atta.service -n 80 --no-pager || true\"
+              \"echo 'ATTA_IMAGE='\\\"${ATTA_IMAGE}\\\"'\",\
+
+              \"command -v docker >/dev/null 2>&1 || sudo dnf -y install docker\",
+              \"sudo systemctl enable --now docker\",
+
+              \"AWS_ACCOUNT_ID=$(echo ${ATTA_IMAGE} | cut -d. -f1)\",
+              \"ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\",
+
+              \"aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${ECR_REGISTRY}\",
+              \"sudo docker pull ${ATTA_IMAGE}\",
+              \"sudo docker images | head -20\"
             ]"
