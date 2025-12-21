@@ -23,11 +23,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           git fetch origin dev --prune
-
           TAG_COMMIT="$(git rev-parse HEAD)"
-
           git merge-base --is-ancestor "${TAG_COMMIT}" "origin/dev"
 
       - uses: actions/setup-python@v5
@@ -43,7 +40,35 @@ jobs:
           make type-check
           make test
 
-      - name: Package source
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # build and push docker image to ECR
+      - name: Build & push Docker image to ECR
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          AWS_REGION="${{ vars.AWS_REGION }}"
+          AWS_ACCOUNT_ID="${{ vars.AWS_ACCOUNT_ID }}"
+          ECR_REPO="${{ vars.ECR_REPO }}"
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:${TAG}"
+
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+
+          docker build -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+
+      - name: Package source (deploy bundle)
         shell: bash
         run: |
           set -euo pipefail
@@ -64,30 +89,32 @@ jobs:
 
           mv "${OUT}" "atta-${TAG}.tar.gz"
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
       - name: Upload artifact to S3
+        shell: bash
         run: |
+          set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           BUCKET="${{ vars.DEPLOY_BUCKET }}"
           aws s3 cp "atta-${TAG}.tar.gz" "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
 
       - name: Deploy on EC2 via SSM Run Command
+        shell: bash
         run: |
+          set -euo pipefail
+
           TAG="${GITHUB_REF_NAME}"
           BUCKET="${{ vars.DEPLOY_BUCKET }}"
           INSTANCE_ID="${{ vars.DEV_EC2_INSTANCE_ID }}"
-          S3_URI="s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
           AWS_REGION="${{ vars.AWS_REGION }}"
+          S3_URI="s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
+
+          # NEW: pass docker image uri to EC2 deploy script
+          ATTA_IMAGE="${IMAGE_URI}"
 
           aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy ATTA ${TAG}" \
+            --comment "Deploy ATTA ${TAG} (${ATTA_IMAGE})" \
             --parameters commands="[
               \"set -euo pipefail\",
               \"export AWS_REGION='${AWS_REGION}'\",
@@ -95,9 +122,13 @@ jobs:
               \"export TAG='${TAG}'\",
               \"export S3_URI='${S3_URI}'\",
               \"export SSM_PATH='/atta/dev'\",
+              \"export ATTA_IMAGE='${ATTA_IMAGE}'\",
               \"cd /tmp\",
               \"rm -rf /tmp/atta-deploy && mkdir -p /tmp/atta-deploy\",
               \"aws s3 cp ${S3_URI} /tmp/atta-deploy/atta-${TAG}.tar.gz\",
               \"tar -xzf /tmp/atta-deploy/atta-${TAG}.tar.gz -C /tmp/atta-deploy\",
-              \"bash /tmp/atta-deploy/deploy/ec2_deploy.sh\"
+              \"bash /tmp/atta-deploy/deploy/ec2_deploy.sh\",
+              \"sudo systemctl start atta.service\",
+              \"sudo systemctl status atta.service --no-pager --full || true\",
+              \"sudo journalctl -u atta.service -n 80 --no-pager || true\"
             ]"
