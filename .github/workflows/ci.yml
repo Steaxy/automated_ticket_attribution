@@ -13,18 +13,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # keep history available if needed later
+          fetch-depth: 0
 
       - name: Setup Python + deps
         uses: ./.github/actions/setup-python-deps
         with:
           python-version: "3.10"
 
-      - name: CI
-        run: make ci
-
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
+      # centralized CI + artifacts (no unconditional reports upload warnings)
+      - name: Quality gates + reports
+        uses: ./.github/actions/ci-quality
         with:
-          name: test-reports
-          path: reports/
+          artifact-name: test-reports

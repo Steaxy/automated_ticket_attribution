@@ -7,7 +7,6 @@ import shlex
 
 
 def _q(value: str) -> str:
-    # robust shell quoting (handles single quotes safely)
     return shlex.quote(value)
 
 
@@ -20,28 +19,32 @@ def main() -> None:
     p.add_argument("--ssm-path", required=True)
     args = p.parse_args()
 
-    # avoid embedding S3 URI inside quotes; build it on the instance
     commands = [
         "set -euo pipefail",
         f"export TAG={_q(args.tag)}",
-        f"export AWS_REGION={_q(args.aws_region)}",
-        f"export AWS_DEFAULT_REGION={_q(args.aws_region)}",
         f"export ATTA_IMAGE={_q(args.atta_image)}",
         f"export SSM_PATH={_q(args.ssm_path)}",
         f"export DEPLOY_BUCKET={_q(args.bucket)}",
+        f"AWS_REGION={_q(args.aws_region)}",
         'echo "[SSM] whoami=$(whoami)"',
         'echo "[SSM] TAG=${TAG}"',
         'echo "[SSM] ATTA_IMAGE=${ATTA_IMAGE}"',
         'echo "[SSM] SSM_PATH=${SSM_PATH}"',
+        'echo "[SSM] AWS_REGION=${AWS_REGION}"',
         's3_uri="s3://${DEPLOY_BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"',
         'echo "[SSM] Download bundle: ${s3_uri}"',
         'WORK_DIR="/tmp/atta-deploy-${TAG}-$RANDOM"',
         'mkdir -p "${WORK_DIR}"',
         'cd "${WORK_DIR}"',
-        'aws s3 cp "${s3_uri}" bundle.tar.gz',
+        'aws --region "${AWS_REGION}" s3 cp "${s3_uri}" bundle.tar.gz',
         "tar -xzf bundle.tar.gz",
         "chmod +x deploy/ec2_deploy.sh",
-        "./deploy/ec2_deploy.sh",
+        # pass explicit args (single source of truth)
+        './deploy/ec2_deploy.sh '
+        '--aws-region "${AWS_REGION}" '
+        '--tag "${TAG}" '
+        '--atta-image "${ATTA_IMAGE}" '
+        '--ssm-path "${SSM_PATH}"',
     ]
 
     print(json.dumps({"commands": commands}))
