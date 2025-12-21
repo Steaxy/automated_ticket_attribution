@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# protect temp files by default
+# safer temp file permissions
 umask 077
 
 APP_NAME="atta"
@@ -15,11 +15,6 @@ RUNTIME_ENV_FILE="${STATE_DIR}/runtime.env"
 TAG="${TAG:?TAG is required}"
 SSM_PATH="${SSM_PATH:-/atta/dev}"
 ATTA_IMAGE="${ATTA_IMAGE:?ATTA_IMAGE is required}"
-
-# normalize region for AWS calls
-AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
-export AWS_REGION
-export AWS_DEFAULT_REGION="${AWS_REGION}"
 
 sudo mkdir -p "${RELEASES_DIR}/${TAG}" "${STATE_DIR}/output"
 
@@ -37,10 +32,10 @@ sudo systemctl enable --now docker
 echo "Copy deploy bundle to releases..."
 # persist the extracted deploy bundle to /opt/atta/releases/<TAG>
 
-# delete release dir INCLUDING dotfiles
+# rm -rf dir/* doesn't remove dotfiles, so wipe them too
 sudo bash -c "rm -rf '${RELEASES_DIR:?}/${TAG:?}/'* '${RELEASES_DIR:?}/${TAG:?}/'.[!.]* '${RELEASES_DIR:?}/${TAG:?}/'..?* || true"
 
-# copy INCLUDING dotfiles
+# cp -a ./* doesn't copy dotfiles; use rsync if available, else cp -a ./. (includes dotfiles)
 if command -v rsync >/dev/null 2>&1; then
   sudo rsync -a --delete ./ "${RELEASES_DIR}/${TAG}/"
 else
@@ -54,7 +49,6 @@ sudo ln -sfn "${RELEASES_DIR}/${TAG}" "${CURRENT_DIR}"
 echo "Render .env from Parameter Store path: ${SSM_PATH}"
 ENV_TMP="/tmp/${APP_NAME}.env.${TAG}.$RANDOM"
 
-# cleanup temp file on exit
 cleanup() {
   sudo rm -f "${ENV_TMP}" >/dev/null 2>&1 || true
 }
@@ -67,9 +61,8 @@ aws ssm get-parameters-by-path \
   --query "Parameters[*].[Name,Value]" \
   --output text \
 | awk -F'\t' '{
-    name=$1;
-    sub(".*/","",name);
-    # NEW: validate var name (systemd EnvironmentFile is strict)
+    name=$1; sub(".*/","",name);
+    # systemd EnvironmentFile expects valid shell-ish var names
     if (name !~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
       print "Invalid env var name from SSM: " name > "/dev/stderr";
       exit 3;
@@ -86,17 +79,22 @@ echo "OK: rendered env keys count: $(sudo wc -l < "${ENV_FILE}")"
 # write runtime env (image uri) for systemd unit expansion
 {
   echo "ATTA_IMAGE=${ATTA_IMAGE}"
-  # NEW: optional, but useful for debugging
   echo "ATTA_TAG=${TAG}"
 } | sudo tee "${RUNTIME_ENV_FILE}" >/dev/null
 sudo chmod 600 "${RUNTIME_ENV_FILE}"
 
 # docker login to ECR and pull image (uses instance role)
+AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
+export AWS_REGION
+export AWS_DEFAULT_REGION="${AWS_REGION}"
+
 ECR_REGISTRY="$(echo "${ATTA_IMAGE}" | awk -F/ '{print $1}')"
 
 echo "Login to ECR: ${ECR_REGISTRY}"
-aws ecr get-login-password --region "${AWS_REGION}" \
-  | sudo docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+
+# capture login password generation error clearly
+LOGIN_PASSWORD="$(aws ecr get-login-password --region "${AWS_REGION}")"
+sudo docker login --username AWS --password-stdin "${ECR_REGISTRY}" <<< "${LOGIN_PASSWORD}"
 
 echo "Pull image: ${ATTA_IMAGE}"
 sudo docker pull "${ATTA_IMAGE}"
@@ -106,9 +104,11 @@ sudo cp "${CURRENT_DIR}/deploy/systemd/atta.service" /etc/systemd/system/atta.se
 sudo test -f /etc/systemd/system/atta.service
 
 sudo systemctl daemon-reload
+
+# enable unit on boot
 sudo systemctl enable atta.service
 
-# actually run it now (oneshot) and fail fast if it doesn't start
+# optional but practical: run it now (oneshot)
 echo "Start (or restart) atta.service..."
 sudo systemctl restart atta.service
 sleep 1
