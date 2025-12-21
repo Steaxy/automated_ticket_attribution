@@ -1,30 +1,25 @@
 [Unit]
-# docker-based oneshot run
 Description=Automated Ticket Attribution (Docker, one run)
 Wants=network-online.target docker.service
 After=network-online.target docker.service
 
 [Service]
-# oneshot container run
 Type=oneshot
 
-# app config (from SSM-rendered file) + runtime deploy info (image uri)
 EnvironmentFile=/opt/atta/.env
 EnvironmentFile=/opt/atta/state/runtime.env
 
-# keep output on host
 WorkingDirectory=/opt/atta
 
-# ensure previous container name is cleared
 ExecStartPre=-/usr/bin/docker rm -f atta
+# ensure image is present even if pre-pull step was skipped
+ExecStartPre=/usr/bin/docker pull ${ATTA_IMAGE}
 
-# run container once, persist output to /opt/atta/state/output
 ExecStart=/usr/bin/docker run --rm --name atta \
   --env-file /opt/atta/.env \
   -v /opt/atta/state/output:/app/output \
   ${ATTA_IMAGE}
 
-# rerun only on failure
 Restart=on-failure
 RestartSec=10
 
