@@ -110,7 +110,8 @@ jobs:
           AWS_REGION="${{ vars.AWS_REGION }}"
           ATTA_IMAGE="${IMAGE_URI}"
           BUCKET="${{ vars.DEPLOY_BUCKET }}"
-          # NEW: optional, set in repo variables if you want; otherwise default is /atta/dev
+
+          # Optional repo var; fallback to /atta/dev
           SSM_PATH="${{ vars.SSM_PATH }}"
           if [[ -z "${SSM_PATH}" ]]; then
             SSM_PATH="/atta/dev"
@@ -123,9 +124,10 @@ jobs:
 
           export TAG AWS_REGION ATTA_IMAGE BUCKET SSM_PATH
 
-          # NEW: build JSON safely (no escaping hell)
+          # Build JSON safely
           PARAMS_JSON="$(python - <<'PY'
           import json, os
+
           tag = os.environ["TAG"]
           aws_region = os.environ["AWS_REGION"]
           atta_image = os.environ["ATTA_IMAGE"]
@@ -147,16 +149,13 @@ jobs:
               "echo '[SSM] SSM_PATH='${SSM_PATH}",
               f"echo '[SSM] Download bundle: {s3_uri}'",
 
-              # Work dir on instance
               "WORK_DIR=\"/tmp/atta-deploy-${TAG}-$RANDOM\"",
               "mkdir -p \"$WORK_DIR\"",
               "cd \"$WORK_DIR\"",
 
-              # Download + extract bundle
               f"aws s3 cp '{s3_uri}' bundle.tar.gz",
               "tar -xzf bundle.tar.gz",
 
-              # Run deploy script from bundle
               "chmod +x deploy/ec2_deploy.sh",
               "./deploy/ec2_deploy.sh",
           ]
@@ -177,33 +176,21 @@ jobs:
 
           echo "SSM CommandId=${COMMAND_ID}"
 
-          # wait for completion, then print logs and fail if not Success
-          aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}"
+          # waiter exits non-zero if Status=Failed, not let it kill the script before fetch stdout/stderr.
+          aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}" || true
 
-          STATUS="$(
+          INVOCATION_JSON="$(
             aws ssm get-command-invocation \
               --command-id "${COMMAND_ID}" \
               --instance-id "${INSTANCE_ID}" \
-              --query "Status" \
-              --output text
+              --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
+              --output json
           )"
 
-          echo "----- SSM STATUS -----"
-          echo "${STATUS}"
+          echo "----- SSM INVOCATION (Status/Stdout/Stderr) -----"
+          echo "${INVOCATION_JSON}"
 
-          echo "----- SSM STDOUT -----"
-          aws ssm get-command-invocation \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${INSTANCE_ID}" \
-            --query "StandardOutputContent" \
-            --output text
-
-          echo "----- SSM STDERR -----"
-          aws ssm get-command-invocation \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${INSTANCE_ID}" \
-            --query "StandardErrorContent" \
-            --output text
+          STATUS="$(python -c 'import json,sys; print(json.load(sys.stdin)["Status"])' <<< "${INVOCATION_JSON}")"
 
           if [[ "${STATUS}" != "Success" ]]; then
             echo "SSM command failed with status: ${STATUS}" >&2
