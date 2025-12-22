@@ -72,7 +72,7 @@ jobs:
           echo "[deploy] instance=${DEV_EC2_INSTANCE_ID}"
           echo "[deploy] ssm_path=${SSM_PATH}"
 
-      # NEW: Debug OIDC (temporary)
+      # NEW: Debug OIDC (temporary) — remove after 1-2 successful runs
       - name: Get OIDC token (debug)
         id: oidc
         shell: bash
@@ -105,30 +105,6 @@ jobs:
             --web-identity-token "${TOKEN}" \
             --duration-seconds 900 \
             --output json
-
-      - name: Debug STS assume (explicit role 1)
-        shell: bash
-        env:
-          TOKEN: ${{ steps.get_token.outputs.token }}
-        run: |
-          set -euo pipefail
-          aws sts assume-role-with-web-identity \
-            --role-arn "arn:aws:iam::086100739031:role/atta-github-actions-deploy-dev" \
-            --role-session-name "gha-debug-1-${GITHUB_RUN_ID}" \
-            --web-identity-token "${TOKEN}" \
-            --duration-seconds 900
-
-      - name: Debug STS assume (explicit role 2)
-        shell: bash
-        env:
-          TOKEN: ${{ steps.get_token.outputs.token }}
-        run: |
-          set -euo pipefail
-          aws sts assume-role-with-web-identity \
-            --role-arn "arn:aws:iam::086100739031:role/AmazonSSMRoleForInstancesQuickSetup" \
-            --role-session-name "gha-debug-2-${GITHUB_RUN_ID}" \
-            --web-identity-token "${TOKEN}" \
-            --duration-seconds 900
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
