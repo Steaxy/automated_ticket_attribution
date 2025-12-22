@@ -72,6 +72,40 @@ jobs:
           echo "[deploy] instance=${DEV_EC2_INSTANCE_ID}"
           echo "[deploy] ssm_path=${SSM_PATH}"
 
+      # NEW: Debug OIDC (temporary)
+      - name: Get OIDC token (debug)
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          raw="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+
+          token="$(printf '%s' "$raw" | jq -r '.value // empty')"
+          if [[ -z "$token" ]]; then
+            echo "::error::OIDC token is empty. Response: $raw" >&2
+            exit 1
+          fi
+
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      # NEW: Debug OIDC (temporary)
+      - name: Debug STS assume deploy role (explicit)
+        shell: bash
+        env:
+          TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          : "${TOKEN:?TOKEN is empty (previous step output missing)}"
+
+          aws sts assume-role-with-web-identity \
+            --role-arn "arn:aws:iam::086100739031:role/atta-github-actions-deploy-dev" \
+            --role-session-name "gha-debug-${GITHUB_RUN_ID}" \
+            --web-identity-token "${TOKEN}" \
+            --duration-seconds 900 \
+            --output json
+
       - name: Debug STS assume (explicit role 1)
         shell: bash
         env:
