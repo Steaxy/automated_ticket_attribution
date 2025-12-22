@@ -82,7 +82,7 @@ jobs:
 
       # pin AWS credential action to a specific commit
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@c5b1634c8e2847b1e6c5213c0fbb79cd4a463257
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}

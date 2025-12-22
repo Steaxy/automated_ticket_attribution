@@ -19,18 +19,20 @@ runs:
     - id: run_ci
       shell: bash
       run: |
-        # run make ci and capture its exit code without disabling safety flags
         set -euo pipefail
-        ci_exit_code=0
-        if ! make ci; then
-          ci_exit_code=$?
-        fi
+
+        # NEW: correctly capture `make ci` exit code (don't lose it via `!`)
+        set +e
+        make ci
+        ci_exit_code=$?
+        set -e
+
         echo "ci_exit_code=${ci_exit_code}" >> "$GITHUB_OUTPUT"
 
     # upload only when reports exist
     - name: Upload test reports
       if: always() && hashFiles('reports/**') != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
       with:
         name: ${{ inputs.artifact-name }}
         path: reports/
