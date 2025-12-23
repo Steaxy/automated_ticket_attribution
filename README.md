@@ -1,9 +1,11 @@
 # Automated Ticket Attribution
 
-Project implements a small automation pipeline that simulates
-automatic classification of IT helpdesk tickets based on an IT Service Catalog.
+Automated pipeline that matches and classifies IT helpdesk tickets against an IT Service Catalog using an LLM, then generates and emails a report.
 
-## Features / Pipeline overview
+**Architecture:** Clean Architecture (Domain / Application / Infrastructure / Entrypoint).
+
+---
+## 🧩 Features / Pipeline overview
 
 ### Task
 1. Fetch helpdesk requests from the webhook endpoint using API key + secret.
@@ -35,7 +37,7 @@ automatic classification of IT helpdesk tickets based on an IT Service Catalog.
 - SMTP sender validates attachments exist, logs total attachment size, supports TLS (`starttls`) toggle.
 
 ---
-## Assumptions and open questions based on the task
+## ❓ Assumptions and open questions based on the task
 
 This project makes a few pragmatic assumptions about the Service Catalog and LLM behavior.
 For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
@@ -52,7 +54,7 @@ In short:
   issue (camera/drivers/permissions) rather than a SaaS availability or access problem, so it is
   classified as `Software & Licensing / Other Software Issue` with SLA 24 hours.
 ---
-## Potential future improvements
+## 🛣️ Potential future improvements
 
 - Package the pipeline into a Docker container and run it on a schedule (cron / n8n).
 - Cache Service Catalog fetch (etag/if-modified-since) to reduce network and speed up runs.
@@ -72,83 +74,149 @@ In short:
   - number of reports sent per day,
   - recipients distribution per day.
 ---
-## Tech Stack
+## 🚀 Quick start
 
-- Python 3.10
-- Google Gemini 2.5 Pro (LLM for classification)
-- Clean Architecture (domain / application / infrastructure / entrypoint)
+### Requirements
+- Python 3.10+
+- `make` (recommended)
 
----
-## Structure
+### Setup
 
-```text
-automated_ticket_attribution/
-  .github/
-  app/
-    cmd/
-        main.py             # run app
-    domain/                 # models
-    infrastructure/         # integrations
-    application/            # use-cases
-    shared/
-    deploy/
-    config.py
-  tests/
-  output/
-  requirements.txt
-  requirements-dev.txt
-  Dockerfile
-  LICENSE
-  Makefile
-  README.md
-```
----
-## Setup
+1) Create and activate a virtual environment:
 
-### prod
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-### dev
+````
+
+2. Install dependencies:
+
+**Dev** (recommended for local run + tests + linters)
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 ```
-### local .env
-```text
-rename env_local.example to .env and fill the values
+
+**Prod** (runtime only)
+
+```bash
+pip install -r requirements.txt
 ```
---- 
-## How to Run
+
+3. Configure `.env`:
+
+```bash
+cp env_local.example .env  # Windows: copy env_local.example .env
+```
+
+Open `.env` and fill required values.
+
+### How to run
 
 From the project root:
 
 ```bash
-make run        # run the app
-make test       # run unit tests (pytest)
-make lint       # lint with ruff
-make type-check # static type checking with mypy
-make excel      # build example excel file
+make run
+```
+
+---
+## 📁 Structure
+
+```text
+automated_ticket_attribution/
+├── app/                  # Application source code
+│   ├── domain/           # Domain layer (pure business models/rules)
+│   ├── application/      # Use-cases + ports (interfaces)
+│   │   ├── dto/          # Use-case DTOs
+│   │   └── ports/        # Ports (interfaces) for infra adapters
+│   ├── infrastructure/   # Adapters/clients (HTTP/LLM/Excel/SMTP/config/etc.)
+│   │   └── email_templates/ # Email templates + builders
+│   ├── shared/           # Shared utilities (exceptions/helpers)
+│   └── cmd/              # Entrypoints (CLI wiring + pipeline runner)
+│
+├── tests/                # Automated tests
+│   ├── unit/             # Unit tests
+│   └── integration/      # Integration tests
+│
+├── deploy/               # Deployment tooling (AWS EC2 / SSM)
+│   └── systemd/          # systemd unit files
+│
+├── .github/              # CI/CD
+│   ├── actions/          # Composite actions
+│   └── workflows/        # GitHub Actions workflows
+│
+└── output/               # Generated artifacts (reports, db, etc.)
 ```
 ---
-## How to deploy on AWS EC2
-### Make this files executable locally (optional, for local debugging):
-```text
+
+## 🛠️ Useful commands
+
+```bash
+make test        # run tests (pytest)
+make lint        # lint (ruff)
+make type-check  # type checking (mypy)
+make excel       # generate example Excel output
+```
+---
+
+## 🏗️ Base pipeline pattern
+
+The project follows **Clean Architecture** and runs as a single **CLI pipeline**.
+
+- **Ports (contracts):** `app/application/ports/`, `app/cmd/ports.py`
+- **Use-cases:** `app/application/`
+- **Adapters (I/O):** `app/infrastructure/`
+- **Entrypoint:** `app/cmd/main.py`
+- **Wiring / runner:** `app/cmd/pipeline.py` → `app/cmd/pipeline_service.py`
+
+**Flow:** send unsent reports → else fetch tickets → load Service Catalog → LLM classify → enrich SLA → export Excel → email report → log status (SQLite).
+
+---
+## ☁️ Dev deployment (GitHub Actions to EC2 via SSM)
+
+### Make deploy scripts executable (optional, only for running locally)
+```bash
 chmod +x deploy/ec2_deploy.sh
 chmod +x deploy/build_bundle.sh
 chmod +x deploy/ssm_deploy.sh
-```
+````
+
 ### Deploy dev (GitHub Actions)
-make deploy-dev creates and pushes a *-dev tag (for example: 0.1.30-dev).
-That tag triggers the deploy-dev workflow: build/push image to ECR, upload bundle to S3, then deploy to EC2 via SSM + systemd.
-```text
+
+`make deploy-dev` creates and pushes a `*-dev` tag (for example: `0.1.30-dev`).
+
+That tag triggers the `deploy-dev` workflow:
+
+* build and push the Docker image to **ECR**
+* upload the deploy bundle to **S3**
+* deploy to the dev **EC2** instance via **SSM** + **systemd**
+
+```bash
 make deploy-dev
 ```
-More info about Deploy [`deploy/README.md`](deploy/README.md)
-## License
+
+More details: [`deploy/README.md`](deploy/README.md)
+
+---
+## 🧰 Tech stack
+
+- **Language:** Python 3.10+
+- **LLM:** Gemini via Google GenAI SDK (`google-genai`)
+- **Service Catalog:** YAML (`PyYAML`)
+- **HTTP:** `requests`
+- **Config:** `.env` + environment variables (`python-dotenv`)
+- **Reporting:** Excel export (`openpyxl`)
+- **Email:** SMTP (Python standard library)
+- **DB:** SQLite (Python standard library)
+
+### Tooling (dev)
+
+- **Testing:** `pytest`, `pytest-cov`
+- **Linting:** `ruff`
+- **Type checking:** `mypy`
+
+---
+## 📄 License
 
 Source-available, non-commercial.  
 You can read and run this code for evaluation, but you may not use it in production
