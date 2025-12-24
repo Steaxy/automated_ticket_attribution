@@ -189,22 +189,26 @@ The workflow triggers the pipeline inside the already-running `atta` Docker cont
 
 n8n is bound to localhost (`127.0.0.1:5678`) and is not exposed publicly.
 
+On local machine:
 ```bash
 ssh -i path_to_ssh_key -L 5678:127.0.0.1:5678 root@<EC2_PUBLIC_IP>
-Open:
+```
+
+Open in web browser:
+```bash
 http://localhost:5678
-Workflow: “atta service (start)”
+```
+
+**Workflow: “atta service (start)”**
+
 Nodes:
+
 1) Manual Trigger
 2) SSH → Execute Command (container status check)
 3) SSH → Execute Command (run pipeline + prevent double runs + persist logs)
 4) SSH → Execute Command (show last logs)
-```
 
-Notes:
-- flock prevents a second run while the first run is still executing.
-- python -u streams logs line-by-line to n8n during execution.
-- Logs are also persisted on the host at /var/log/atta-manual-run.log.
+Note: nodes 2–4 run on the EC2 host using SSH credentials configured in n8n.
 
 ---
 ## 🧰 Tech stack
