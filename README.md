@@ -17,6 +17,7 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 
 ### Additional features
 - Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to ECR, uploads a deploy bundle to S3, and deploys to the dev EC2 instance via SSM + systemd.
+- Manual run via self-hosted n8n on the EC2: a workflow runs the pipeline on demand through SSH, prevents double-runs with `flock`, streams logs to n8n, and persists them to `/var/log/atta-manual-run.log` (with a “tail last logs” step).
 - Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
 - Log all key steps via Python `logging` and provide a simple terminal progress indicator (spinner).
 - Covered by unit and integration tests and static checks (ruff, mypy).
@@ -178,6 +179,36 @@ make deploy-dev
 ```
 
 More details: [`deploy/README.md`](deploy/README.md)
+
+---
+## ▶️ Manual run via n8n (self-hosted on EC2)
+
+The workflow triggers the pipeline inside the already-running `atta` Docker container via `docker exec`.
+
+### Connect to n8n UI from your local machine (SSH tunnel)
+
+n8n is bound to localhost (`127.0.0.1:5678`) and is not exposed publicly.
+
+On local machine:
+```bash
+ssh -i path_to_ssh_key -L 5678:127.0.0.1:5678 root@<EC2_PUBLIC_IP>
+```
+
+Open in web browser:
+```bash
+http://localhost:5678
+```
+
+**Workflow: “atta service (start)”**
+
+Nodes:
+
+1) Manual Trigger
+2) SSH → Execute Command (container status check)
+3) SSH → Execute Command (run pipeline + prevent double runs + persist logs)
+4) SSH → Execute Command (show last logs)
+
+Note: nodes 2–4 run on the EC2 host using SSH credentials configured in n8n.
 
 ---
 ## 🧰 Tech stack
