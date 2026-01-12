@@ -4,7 +4,7 @@ Your internal IT Helpdesk is facing high volume. Currently, support staff manual
 
 ## Objective
 
-Build a small script/application that simulates this automation pipeline. Focus on clean code, error handling, and correct data manipulation. Any language is acceptable (Python, Go, Node.js, etc.).
+Build a script/application that simulates this automation pipeline. Focus on clean code, error handling, and correct data manipulation. Any language is acceptable (Python, Go, Node.js, etc.).
 
 ## Requirements
 
