@@ -17,7 +17,7 @@ Full requirements: [`TASK.md`](TASK.md)
 5. Generate a sorted Excel report with formatting.
 6. Send the report via SMTP to the configured recipient, including a link to the codebase.
 
-### Done in addition
+### In addition
 - Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to AWS ECR, uploads a deploy bundle to AWS S3, and deploys to the dev AWS EC2 instance via AWS SSM + systemd.
 - Manual run via self-hosted n8n on the AWS EC2: a workflow runs the pipeline on demand through SSH, prevents double-runs with `flock`, streams logs to n8n, and persists them to `/var/log/atta-manual-run.log` (with a “tail last logs” step).
 - Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
@@ -40,13 +40,7 @@ Full requirements: [`TASK.md`](TASK.md)
 - SMTP sender validates attachments exist, logs total attachment size, supports TLS (`starttls`) toggle.
 
 ---
-## ❓ Assumptions and open questions based on the task
 
-This project makes a few pragmatic assumptions about the Service Catalog and LLM behavior.
-For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
-and security considerations), see [`DESIGN_NOTES.md`](DESIGN_NOTES.md).
-
----
 ## 🛣️ Potential future improvements
 
 - Cache Service Catalog fetch (etag/if-modified-since) to reduce network and speed up runs.
